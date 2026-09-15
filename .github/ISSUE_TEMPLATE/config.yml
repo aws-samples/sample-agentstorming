@@ -1,0 +1,10 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability
+    about: Do not open a public issue. Use GitHub private vulnerability reporting — see SECURITY.md.
+  - name: Support expectations
+    url: https://github.com/aws-samples/sample-agentstorming/blob/main/SUPPORT.md
+    about: This is a reference implementation with no SLA. Read SUPPORT.md first.

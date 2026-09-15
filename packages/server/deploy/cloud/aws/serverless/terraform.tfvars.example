@@ -1,0 +1,10 @@
+project     = "agentstorm"
+environment = "research"
+region      = "us-east-2"
+aws_profile = "default"
+
+rds_instance_class = "db.t4g.small"
+fargate_cpu        = 2048
+fargate_memory     = 4096
+desired_count      = 1
+admin_token        = ""

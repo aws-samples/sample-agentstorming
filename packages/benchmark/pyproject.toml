@@ -1,0 +1,60 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentstorming-benchmark"
+version = "0.1.0"
+description = "Benchmark harness comparing Agent Storming variants against single-agent, orchestrator-worker, and multi-agent-debate baselines."
+authors = [{name = "Amazon.com, Inc. or its affiliates"}]
+requires-python = ">=3.10"
+license = "MIT-0"
+dependencies = [
+  "boto3>=1.34",
+  "botocore>=1.34",
+  "pydantic>=2.5",
+  "httpx>=0.27",
+  "tenacity>=8.2",
+  "typer>=0.12",
+  "rich>=13.7",
+  "datasets>=2.19",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "pandas>=2.2",
+  "scikit-learn>=1.4",
+  "sentence-transformers>=2.7",
+  "matplotlib>=3.8",
+  "pyyaml>=6.0",
+  "tqdm>=4.66",
+  "requests>=2.32",
+  "python-dotenv>=1.0",
+  "agentstorming-client>=0.1.0",
+]
+
+# Dropped, having been declared but never imported anywhere in the harness:
+# nltk, bertopic, seaborn, arxiv, tabulate. They were listed for the
+# contribution-diversity metrics described in the benchmark README
+# (distinct-n, BERTopic clustering) which were never implemented.
+#
+# nltk mattered: it carried GHSA-8mgp-746c-j5xp (CVSS 8.3, model-artifact
+# path traversal) with NO upstream patch available at any version, so it could
+# not have been fixed by pinning. An unused dependency is pure attack surface
+# — deleting it removes the finding outright rather than documenting it.
+#
+# If the diversity metrics are revived, add the dependency back deliberately
+# and re-check its advisories at that point.
+
+[project.scripts]
+agentstorming-bench = "agentstorming_benchmark.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

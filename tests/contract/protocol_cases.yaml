@@ -1,0 +1,74 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Agent Storming protocol contract test cases.
+#
+# Each runner under tests/contract/runners/* loads this file and MUST
+# exercise every applicable case against its own SDK implementation.
+# If a new runner cannot execute a case (e.g. MCP can't directly
+# issue a raw HTTP request), the runner marks it `skipped: reason`.
+
+cases:
+  - id: CT-001-claim-returns-snapshot
+    summary: Redeeming an invite returns a snapshot event
+    steps:
+      - action: redeem_invite
+        kind: any
+      - assert: { got_pid: true }
+      - assert: { snapshot_has_participants: true }
+      - assert: { snapshot_carries_server_pubkey: true }
+
+  - id: CT-002-post-signs
+    summary: post_message signs the envelope with Ed25519
+    steps:
+      - action: redeem_invite
+        kind: participant
+      - action: post_message
+        text: "hello"
+      - assert: { response_has_seq: true }
+      - assert: { envelope_has_sig_ed25519: true }
+
+  - id: CT-003-stream-receives-own-post
+    summary: Live SSE stream sees the client's own posts after a round-trip
+    steps:
+      - action: redeem_invite
+        kind: participant
+      - action: open_stream
+      - action: post_message
+        text: "round-trip"
+      - assert: { observed_own_message_within_seconds: 5 }
+
+  - id: CT-004-snapshot-reconcile
+    summary: metadata_snapshot events update the client's local state
+    steps:
+      - action: redeem_invite
+      - action: request_snapshot
+      - assert: { local_state_matches_snapshot: true }
+
+  - id: CT-005-kind-inferred-server-side
+    summary: Generic /claim infers kind from the invite record
+    steps:
+      - action: redeem_invite
+        # runner does NOT pass a kind; asserts server returned one
+      - assert: { response_has_kind_field: true }
+      - assert: { response_has_affiliation_field: true }
+
+  - id: CT-006-reject-bad-signature
+    summary: Server rejects a post with a bad signature
+    steps:
+      - action: redeem_invite
+        kind: participant
+      - action: post_message
+        text: "tampered"
+        tamper_sig: true
+      - assert:
+          http_status: 4xx
+          error_code: "org.agentstorming.err.sig_invalid"
+
+  - id: CT-007-login-error-not-propagated
+    summary: An LLM returning "Not logged in" text MUST NOT reach the room
+    steps:
+      - action: inject_backend_response
+        raw: "Not logged in · Please run /login"
+      - action: run_one_deliberation_cycle
+      - assert: { room_received_message_count: 0 }

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentstorm.dev/schemas/agentstorming.test.v1.json",
+  "title": "Agent Storm test-case front-matter (v1)",
+  "description": "YAML frontmatter for *.spec.md files under tests/scenarios/specs/ and tests/integration/*/specs/.",
+  "type": "object",
+  "required": ["schema", "id", "title", "priority", "deployment_mode", "harnesses"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "agentstorming.test/v1" },
+    "id": { "type": "string", "pattern": "^AS-[A-Z0-9-]+$" },
+    "title": { "type": "string", "minLength": 3, "maxLength": 200 },
+    "priority": { "enum": ["P0", "P1", "P2", "P3"] },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "covers_spec": { "type": "array", "items": { "type": "string" } },
+    "requires_features": { "type": "array", "items": { "type": "string" } },
+    "deployment_mode": { "enum": ["local", "aws-single-vm", "aws-serverless", "any"] },
+    "harnesses": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["kind"],
+        "additionalProperties": true,
+        "properties": {
+          "kind": {
+            "enum": [
+              "native-agent",
+              "client-py",
+              "client-ts",
+              "mcp",
+              "spa",
+              "strands",
+              "crewai",
+              "langgraph",
+              "pydantic-ai"
+            ]
+          },
+          "persona": { "type": "string" },
+          "via": { "type": "string" },
+          "role": { "type": "string" },
+          "prompt_file": { "type": "string" },
+          "prompt": { "type": "string" }
+        }
+      }
+    },
+    "preconditions": { "type": "array", "items": { "type": "string" } },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wall_clock_seconds": { "type": "integer", "minimum": 1 },
+        "max_bedrock_usd": { "type": "number", "minimum": 0 },
+        "max_messages": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "artefacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": { "path": { "type": "string" } }
+      }
+    }
+  }
+}

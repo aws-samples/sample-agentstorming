@@ -1,0 +1,231 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# CI for Agent Storming.
+#
+# Scope note, because a workflow that claims more than it does is worse than
+# none: this runs the checks that work from a clean checkout with no AWS
+# credentials and no internal tooling. It does NOT run the Bedrock-backed
+# benchmark (it costs money per invocation), the live-protocol equivalence run,
+# or the internal scanners used for the publication review.
+#
+# What it does cover: the unit and integration suite against a real Postgres,
+# scenario-spec validation, the TypeScript and UI build plus a live MCP handshake,
+# npm audit per workspace, Terraform fmt + validate, Checkov, and Bandit.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Tests + scenario specs
+    runs-on: ubuntu-latest
+
+    # The integration tests need Postgres. Without it conftest.py skips them,
+    # which would make a green run mean much less than it appears to.
+    services:
+      postgres:
+        image: public.ecr.aws/docker/library/postgres:16
+        env:
+          POSTGRES_USER: agentstorming
+          POSTGRES_DB: agentstorming_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      AGENTSTORMING_TEST_DSN: postgresql://agentstorming@127.0.0.1:5432/agentstorming_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        # Third-party actions are pinned to a full commit SHA, not a tag. A tag
+        # is mutable: whoever controls the repository can repoint v5 at new code
+        # and it runs here with our token. The comment records which release the
+        # SHA was, since the SHA alone is unreadable.
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          version: "0.9.11"
+
+      - name: uv.lock is in sync with the manifests
+        # build-python.sh installs with --frozen, which uses the lock as-is and
+        # does NOT check it still matches pyproject.toml. Without this step a
+        # dependency change plus a forgotten `uv lock` gives a green build that
+        # installed the old tree.
+        run: uv lock --check
+
+      - name: Build the workspace
+        run: ./scripts/build-python.sh
+
+      - name: Confirm Postgres is actually reachable
+        # Guards against a green suite that silently skipped every integration
+        # test because the service container was not up.
+        run: |
+          source .venv/bin/activate
+          python - <<'PY'
+          import asyncio, asyncpg, os
+          async def main():
+              c = await asyncpg.connect(os.environ["AGENTSTORMING_TEST_DSN"], timeout=10)
+              await c.close()
+              print("postgres reachable — integration tests will run")
+          asyncio.run(main())
+          PY
+
+      - name: Tests
+        run: |
+          source .venv/bin/activate
+          python -m pytest packages/ tests/ -q
+
+      - name: Scenario specs
+        run: |
+          source .venv/bin/activate
+          python tests/scenarios/runner.py validate
+
+  terraform:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Pinned to a commit SHA for the reason given in the python job above.
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.13.3"
+          terraform_wrapper: false
+      - name: fmt + validate every stack
+        run: ./scripts/validate-terraform.sh
+
+  typescript:
+    name: TypeScript + UI build
+    runs-on: ubuntu-latest
+    # Added because the UI had been failing to build and nothing noticed. The
+    # export verifier checks that every source file carries an SPDX header; it
+    # does not check that the file still parses, and a `//` comment in a CSS file
+    # satisfies the first while breaking the second. A build that nothing runs is
+    # a build that is broken.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Build client-ts, the MCP bridge, and the UI
+        run: ./scripts/build-typescript.sh
+      - name: The MCP bridge answers a real initialize handshake
+        # Compiling is not running. This is the cheapest check that the built
+        # artefact and its workspace siblings actually resolve at runtime.
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            | timeout 30 node packages/client-mcp-ts/dist/cli.js \
+            | tee /tmp/handshake.json
+          grep -q '"serverInfo"' /tmp/handshake.json
+
+  deps:
+    name: npm audit
+    runs-on: ubuntu-latest
+    # The overrides in client-mcp-ts exist to hold six packages past published
+    # advisories. Nothing was checking that they still do.
+    strategy:
+      fail-fast: false
+      matrix:
+        workspace: [packages/ui, packages/client-ts, packages/client-mcp-ts]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: audit ${{ matrix.workspace }}
+        working-directory: ${{ matrix.workspace }}
+        # Audit the tree that is actually committed. The earlier version ran
+        # `npm install --package-lock-only` first, which rewrites the lock file
+        # from the caret ranges and then audits the result — so it would pass
+        # even if the committed lock file resolved to something vulnerable.
+        run: npm audit --audit-level=moderate
+
+      - name: the lock file matches package.json
+        working-directory: ${{ matrix.workspace }}
+        # `npm ci` exits non-zero if the two disagree. Without this, a stale
+        # lock file is a clean audit of a tree nobody installs.
+        run: npm ci --no-fund --no-audit --loglevel=error
+
+  policy:
+    name: Checkov + Bandit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install scanners
+        # Pinned to the exact versions the two findings below were measured
+        # with. An unpinned scanner turns a passing build into a failing one on
+        # somebody else's release schedule, and the reverse — and a version other
+        # than the measured one makes the asserted count meaningless. Bandit
+        # matters especially: 1.8.6 reports seven B615 findings that 1.9.4 does
+        # not, so the pin is the difference between a real gate and a coin flip.
+        #
+        # Note on the *passed* count, which is why this pin moved: checkov
+        # 3.2.484 reports 763 passed on this tree and 3.3.16 reports 889, because
+        # newer releases add rules. The failed count is 2 under both. Only the
+        # failed count is asserted below, and the pin matches the version the two
+        # findings were last measured with — quoting a passed count without a
+        # version attached is meaningless.
+        run: pip install checkov==3.3.16 bandit==1.9.4
+
+      - name: Bandit — no HIGH, ignoring every suppression
+        # This is the gate that means something. `--ignore-nosec` discards every
+        # `# nosec` comment in the tree, so a pass here cannot be manufactured by
+        # annotating the finding away. 0 HIGH holds with or without the
+        # suppressions; the previous step name claimed "no MEDIUM" too, which was
+        # only true because nosec was being honoured.
+        run: bandit -r packages -x '*/node_modules/*,*/.venv/*,*/dist/*' -lll --ignore-nosec
+
+      - name: Bandit — no MEDIUM beyond the documented suppressions
+        # Sixteen MEDIUM findings are suppressed with `# nosec` and a reason at
+        # each site; eleven are the same B108 (hardcoded /tmp in tests, required
+        # because macOS caps AF_UNIX socket paths at 104 characters). They are
+        # enumerated in docs/security/policy-scan-exceptions.md. This step is the
+        # regression guard on that set, not evidence of its absence.
+        run: bandit -r packages -x '*/node_modules/*,*/.venv/*,*/dist/*' -ll
+
+      - name: Checkov — Terraform and Dockerfiles
+        # Two findings are expected and documented: CKV_AWS_145 on each S3
+        # log-delivery target, which AWS requires to be SSE-S3. See
+        # docs/security/policy-scan-exceptions.md. Anything else is a
+        # regression, so the count is asserted rather than the exit code
+        # ignored.
+        run: |
+          set +e
+          checkov -d . --compact --quiet \
+            --skip-path '\.venv' --skip-path 'node_modules' \
+            --skip-path 'packages/ui/dist' > checkov.txt 2>&1
+          set -e
+          cat checkov.txt
+          failed=$(grep -Eo 'Failed checks: [0-9]+' checkov.txt | awk '{n+=$3} END{print n+0}')
+          skipped=$(grep -Eo 'Skipped checks: [0-9]+' checkov.txt | awk '{n+=$3} END{print n+0}')
+          echo "failed=$failed skipped=$skipped"
+          if [ "$skipped" -ne 0 ]; then
+            echo "::error::$skipped suppressed check(s). Suppressions are not accepted; document the exception instead."
+            exit 1
+          fi
+          if [ "$failed" -gt 2 ]; then
+            echo "::error::$failed failed checks, expected at most the 2 documented in docs/security/policy-scan-exceptions.md"
+            exit 1
+          fi

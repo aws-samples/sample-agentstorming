@@ -1,0 +1,7 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+packages:
+  - 'packages/ui'
+  - 'packages/client-ts'
+  - 'packages/client-mcp-ts'

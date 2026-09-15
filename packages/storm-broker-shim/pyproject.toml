@@ -1,0 +1,23 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+[project]
+name = "agentstorming-broker-shim"
+version = "0.1.0"
+description = "Auto-import shim that makes Python SDKs talk to the Storm credential broker"
+requires-python = ">=3.11"
+license = "MIT-0"
+dependencies = [
+    "agentstorming-client>=0.1.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["storm_broker_shim*"]
+
+[tool.setuptools.data-files]
+"" = ["storm_broker_shim.pth"]

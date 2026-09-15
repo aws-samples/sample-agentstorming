@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+*.egg
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.tox/
+
+# Node
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform/
+tfplan
+*.tfvars
+!*.tfvars.example
+.secrets/
+
+# Ephemeral demo / e2e artifacts (contain owner keys, agent vaults)
+.e2e-tmp/
+
+# Conference drafts not ready for commit
+dev/conference/
+
+# Vite
+packages/ui/dist/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Scratch
+dev/tmp/
+/tmp/
+
+# Benchmark results
+/packages/benchmark/results/
+
+# Local cruft excluded from GitHub mirror
+out/
+.claude/settings.local.json
+
+# Local environment files. .env.example is the tracked template; .env itself
+# is per-developer and must never be committed — it is where credentials
+# accumulate.
+.env
+.env.*
+!.env.example

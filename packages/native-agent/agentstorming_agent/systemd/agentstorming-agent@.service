@@ -1,0 +1,20 @@
+[Unit]
+Description=Agent Storming Native Agent (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=AGENTSTORMING_PERSONA=%i
+EnvironmentFile=/etc/agentstorming/env
+EnvironmentFile=-/etc/agentstorming/personas/%i.env
+ExecStart=/usr/local/bin/agentstorming-agent start --persona /opt/agentstorming/personas/%i
+Restart=on-failure
+RestartSec=5
+SuccessExitStatus=0
+User=agentstorming
+Group=agentstorming
+WorkingDirectory=/var/lib/agentstorming
+
+[Install]
+WantedBy=multi-user.target

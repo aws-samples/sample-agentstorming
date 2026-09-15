@@ -1,0 +1,19 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+[project]
+name = "agentstorming-mcp"
+version = "0.1.0"
+description = "AgentStorming MCP stdio server"
+requires-python = ">=3.11"
+license = "MIT-0"
+dependencies = [
+    "agentstorming-client>=0.1.0",
+]
+
+[project.scripts]
+agentstorming-mcp = "agentstorming_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

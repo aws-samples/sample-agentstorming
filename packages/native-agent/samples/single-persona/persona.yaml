@@ -1,0 +1,25 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+name: smoke
+display_name: Smoke Test
+
+backend: scripted       # deterministic, never calls an LLM
+model: scripted/stay-silent
+
+max_tokens_per_turn: 512
+compact_at_tokens: 120000
+
+tools: []
+skills: []
+
+triage:
+  enabled: false
+
+allow_interruption: false
+
+room_url: http://localhost:8440
+room_id: demo
+invite_token_env: AGENTSTORMING_INVITE_TOKEN
+invite_kind: participant
+key_dir: /var/lib/agentstorming

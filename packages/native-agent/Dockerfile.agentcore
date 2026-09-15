@@ -1,0 +1,59 @@
+# Persona runtime packaged for Amazon Bedrock AgentCore Runtime (Instances).
+#
+# Differences from the plain Dockerfile:
+#   - entrypoint is the AgentCore HTTP app (POST /invocations, GET /ping on
+#     8080) instead of the CLI, so AgentCore can proxy invocations to it;
+#   - the persona daemon starts at boot (AGENTSTORMING_AUTOSTART=1) so the
+#     participant is actually listening without being invoked first;
+#   - includes the bedrock-agentcore SDK.
+#
+# Build context MUST be the repository root:
+#   docker build -f packages/native-agent/Dockerfile.agentcore \
+#     --platform linux/arm64 -t agentstorming/agent-agentcore:local .
+#
+# Match --platform to the capacity provider's operatingSystem
+# (LINUX_ARM64 → linux/arm64, LINUX_X86_64 → linux/amd64).
+
+# Base image from ECR Public, not Docker Hub. Docker Hub imposes
+# anonymous pull rate limits that break CI unpredictably, and AWS guidance for
+# published samples is to pull from an ECR repository. `public.ecr.aws/docker/
+# library/*` mirrors the official images, so the contents are the same.
+FROM public.ecr.aws/docker/library/python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY packages/client-py /tmp/agentstorming-client/
+RUN pip install --no-cache-dir /tmp/agentstorming-client/
+
+COPY packages/native-agent/pyproject.toml /app/
+COPY packages/native-agent/agentstorming_agent /app/agentstorming_agent
+RUN pip install --no-cache-dir ".[bedrock,anthropic,openai,agentcore]"
+
+ENV AGENTSTORMING_KEY_DIR=/var/lib/agentstorming \
+    AGENTSTORMING_PERSONA_DIR=/persona \
+    AGENTSTORMING_AUTOSTART=1 \
+    PORT=8080 \
+    PYTHONUNBUFFERED=1
+
+# Never root. The broker, when used, is a separate process under a
+# different uid and is NOT started from this image — see
+# deploy/cloud/aws/agentcore-runtime/README.md for how the Stage-13 broker
+# invariant is satisfied on AgentCore.
+RUN useradd --system --uid 1000 --home-dir /home/agentstorming --create-home agentstorming \
+    && mkdir -p /var/lib/agentstorming \
+    && chown -R agentstorming:agentstorming /var/lib/agentstorming /app
+USER agentstorming
+
+EXPOSE 8080
+
+# AgentCore health-checks GET /ping itself; this mirrors it so the image
+# behaves the same under plain docker/compose.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/ping', timeout=4).status==200 else 1)"
+
+# AgentCore health-checks GET /ping and proxies POST /invocations.
+ENTRYPOINT ["python", "-m", "agentstorming_agent.agentcore_app"]

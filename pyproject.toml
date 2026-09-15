@@ -1,0 +1,47 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+[project]
+name = "agentstorming-monorepo"
+version = "0.0.0"
+description = "Agent Storming — workspace root"
+requires-python = ">=3.11"
+license = "MIT-0"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+# storm-broker and storm-broker-shim were installed by scripts/build-python.sh
+# but were not members, so `uv lock` would have produced a lock file that
+# silently omitted them and their transitive tree.
+members = [
+    "packages/server",
+    "packages/client-py",
+    "packages/client-mcp",
+    "packages/native-agent",
+    "packages/benchmark",
+    "packages/storm-broker",
+    "packages/storm-broker-shim",
+]
+
+[tool.uv.sources]
+agentstorming-client = { workspace = true }
+agentstorming-server = { workspace = true }
+agentstorming-agent = { workspace = true }
+agentstorming-mcp = { workspace = true }
+agentstorming-broker = { workspace = true }
+agentstorming-broker-shim = { workspace = true }
+
+# Test tooling belongs in the lock file too, otherwise the lock pins the library
+# tree and the thing that decides whether the suite passes stays unpinned.
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "jsonschema==4.26.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,0 +1,614 @@
+[
+  {
+    "id": "pg_sm2dl",
+    "domain_a": "statistical mechanics",
+    "domain_b": "deep learning",
+    "title": "Applying Deep Learning to Optimize Energy Landscapes in Statistical Mechanics",
+    "problem": "In statistical mechanics, the energy landscape of a system describes the potential energy as a function of its configuration. A critical task is to identify the global minimum of this landscape, which corresponds to the system's most stable state. Traditional methods like Monte Carlo simulations or mean-field approximations are often computationally expensive and may fail to converge to the global minimum in complex systems. \n\nYour task is to propose a novel approach leveraging deep learning techniques to optimize the search for the global minimum in the energy landscape of a given statistical mechanical system. Specifically, consider a system described by a Hamiltonian H(x), where x represents the configuration of the system. You are to design a deep learning model that can efficiently navigate the energy landscape to find the configuration x* that minimizes H(x).\n\nThe problem requires you to draw an analogy between the optimization of energy landscapes in statistical mechanics and the optimization of loss functions in deep learning. Identify a specific deep learning technique that can be adapted to this problem, and describe how it can be applied to navigate the energy landscape efficiently. Provide a concrete example with a verifiable calculation or bound to demonstrate the effectiveness of your approach.\n\nBeware of the common pitfall of assuming that gradient-based optimization methods will always work well in this context. While gradient descent is a powerful tool in deep learning, the energy landscape in statistical mechanics can be highly non-convex with many local minima, making gradient-based methods prone to getting stuck in local minima.",
+    "gold_answer": "To tackle the optimization of energy landscapes in statistical mechanics using deep learning, we can draw an analogy between the energy landscape H(x) and the loss function L(\u03b8) in deep learning, where x represents the configuration of the system and \u03b8 represents the parameters of the deep learning model.\n\nA suitable deep learning technique for this problem is the use of Generative Adversarial Networks (GANs). In GANs, a generator network G tries to produce configurations x that minimize H(x), while a discriminator network D tries to distinguish between configurations produced by G and true configurations from the system. The generator can be trained to produce configurations that minimize H(x) by playing a minimax game with the discriminator.\n\nTo apply GANs to this problem, we can define the generator G as a neural network that takes a random noise vector z as input and outputs a configuration x. The discriminator D is another neural network that takes a configuration x as input and outputs a probability that x is a true configuration of the system. The loss function for the generator is defined as L_G = -log(D(G(z))), which encourages G to produce configurations that fool the discriminator. The loss function for the discriminator is defined as L_D = -log(D(x_true)) - log(1 - D(G(z))), which encourages D to correctly classify true and generated configurations.\n\nTo demonstrate the effectiveness of this approach, consider a simple system with a Hamiltonian H(x) = x^2. The global minimum of this landscape is at x* = 0. We can train a GAN with a generator G(z) = w*z, where w is a trainable weight, and a discriminator D(x) = sigmoid(b*x), where b is a trainable bias. After training, we expect the generator to produce configurations x close to 0, which corresponds to the global minimum of H(x).\n\nThe most likely hallucination an LLM would emit on this problem is to suggest using a simple gradient descent method to optimize H(x) directly. However, this approach is prone to getting stuck in local minima due to the non-convexity of the energy landscape. The GAN approach, on the other hand, can explore the energy landscape more effectively by generating diverse configurations and learning from the discriminator's feedback.",
+    "rubric": [
+      "Identifies the analogy between energy landscapes in statistical mechanics and loss functions in deep learning.",
+      "Correctly names the technique from deep learning: Generative Adversarial Networks (GANs).",
+      "Performs the verifiable derivation: Defines the generator and discriminator networks and their loss functions, and demonstrates the effectiveness of the approach on a simple system.",
+      "Avoids the hallucination trap: Does not suggest using simple gradient descent to optimize H(x) directly.",
+      "Discusses limitations or scope of the analogy: Acknowledges that GANs may still struggle with highly complex and non-convex energy landscapes."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Suggesting to use simple gradient descent to optimize H(x) directly, which is prone to getting stuck in local minima.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_ab1234",
+    "domain_a": "category theory",
+    "domain_b": "distributed systems",
+    "title": "Monads in Distributed Consensus Protocols",
+    "problem": "In category theory, a monad is a structure that captures the essence of computations in a generic way. In distributed systems, consensus protocols ensure that all nodes agree on a single data value. Consider a scenario where a distributed consensus protocol must handle node failures and network partitions. Propose a method to model this protocol using monads, specifically focusing on how monads can encapsulate the failure handling and recovery mechanisms. Your solution should identify the appropriate monad and describe how it can be used to ensure consensus despite failures. Note that the consensus protocol in question is Paxos, but you must develop a novel approach that integrates monads in a way not previously described in literature.",
+    "gold_answer": "To model Paxos using monads, we can utilize the `Maybe` monad to handle potential node failures. The `Maybe` monad encapsulates computations that may fail, providing a structured way to handle these failures. In Paxos, when a proposer sends a proposal, it may receive no response due to a node failure. Using the `Maybe` monad, we can represent this uncertainty:\n\n1. **Cross-domain analogy**: The `Maybe` monad in category theory is analogous to the failure-handling mechanism in distributed systems.\n2. **Named technique**: The `Maybe` monad.\n3. **Verifiable derivation**: Consider a proposal function `propose(value: V) -> Maybe[Accepted]` where `Accepted` is a type indicating the proposal was accepted. If a node fails to respond, the function returns `Nothing`; otherwise, it returns `Just(Accepted)`.\n4. **Hallucination trap**: An LLM might suggest using the `IO` monad, which is designed for side-effecting operations and is not suitable for purely functional failure handling in this context.\n5. **Limitations**: This approach assumes that all failures can be modeled as non-responses, which may not cover all failure modes in a real-world distributed system.",
+    "rubric": [
+      "Identifies the analogy between failure handling in distributed systems and the `Maybe` monad in category theory.",
+      "Correctly names the `Maybe` monad as the technique from category theory.",
+      "Performs the verifiable derivation by defining the `propose` function using the `Maybe` monad.",
+      "Avoids the hallucination trap by not suggesting the `IO` monad.",
+      "Discusses limitations or scope of the analogy, such as the assumption that all failures are modeled as non-responses."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might incorrectly suggest using the `IO` monad for handling failures in Paxos.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_xy5678",
+    "domain_a": "category theory",
+    "domain_b": "distributed systems",
+    "title": "Functorial Data Replication in Distributed Storage",
+    "problem": "In category theory, a functor is a mapping between categories that preserves the structure of morphisms. In distributed systems, data replication is a common technique to improve data availability and fault tolerance. Consider a distributed storage system where data is replicated across multiple nodes. Propose a method to model this replication process using functors, specifically focusing on how functors can ensure consistency and coherence across replicas. Your solution should identify the appropriate functor and describe how it can be used to maintain data consistency despite concurrent updates. Note that the storage system in question uses a CRDT (Conflict-free Replicated Data Type), but you must develop a novel approach that integrates functors in a way not previously described in literature.",
+    "gold_answer": "To model data replication using functors, we can utilize the concept of a covariant functor, which maps objects and morphisms in a way that preserves their structure. In the context of CRDTs, each replica can be seen as an object in a category, and updates as morphisms. A covariant functor `F` can be defined such that `F(update): F(replica) -> F(replica')`, where `update` is a morphism representing an update operation.\n\n1. **Cross-domain analogy**: The covariant functor in category theory is analogous to the replication process in distributed systems.\n2. **Named technique**: Covariant functor.\n3. **Verifiable derivation**: Define a functor `F` such that for any update `u: R -> R'` on a replica `R`, `F(u): F(R) -> F(R')` ensures that the structure of the replica is preserved. For example, if `R` is a set of key-value pairs, `F(R)` could be the set of all possible updates to `R`.\n4. **Hallucination trap**: An LLM might suggest using a contravariant functor, which reverses the direction of morphisms and is not suitable for modeling replication where the direction of updates must be preserved.\n5. **Limitations**: This approach assumes that all updates can be modeled as structure-preserving morphisms, which may not hold in complex CRDTs with intricate merge operations.",
+    "rubric": [
+      "Identifies the analogy between data replication in distributed systems and covariant functors in category theory.",
+      "Correctly names the covariant functor as the technique from category theory.",
+      "Performs the verifiable derivation by defining the functor `F` and its application to updates.",
+      "Avoids the hallucination trap by not suggesting a contravariant functor.",
+      "Discusses limitations or scope of the analogy, such as the assumption that all updates are structure-preserving."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might incorrectly suggest using a contravariant functor for modeling data replication.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_x9c1d7",
+    "domain_a": "information geometry",
+    "domain_b": "reinforcement learning",
+    "title": "Using Fisher Information for Efficient Exploration in RL",
+    "problem": "In information geometry, the Fisher information matrix (FIM) quantifies the sensitivity of a probability distribution to changes in its parameters. Consider a reinforcement learning (RL) agent using a policy gradient method where the policy is parameterized by \u03b8. The agent interacts with an environment with state space S and action space A. The goal is to design an exploration strategy that leverages the FIM to encourage the agent to explore under-visited parts of the state-action space. Formulate a method where the agent's intrinsic reward is modified based on the FIM of the state-action visitation distribution. Your solution should detail how the FIM is computed, how it influences the intrinsic reward, and how this can lead to more efficient exploration. Ensure your method is self-contained and does not rely on external data or figures.",
+    "gold_answer": "To solve this problem, we draw an analogy between the Fisher information in information geometry and the notion of uncertainty or variance in exploration strategies in RL. The Fisher information matrix (FIM) for a parameterized policy \u03c0(a|s;\u03b8) can be computed as FIM_ij = E[\u2202log\u03c0(a|s;\u03b8)/\u2202\u03b8_i * \u2202log\u03c0(a|s;\u03b8)/\u2202\u03b8_j], where the expectation is taken over the state-action distribution. \n\nWe propose an intrinsic reward modification that adds a bonus term proportional to the determinant of the FIM of the state-action visitation distribution. This bonus encourages the agent to visit states and take actions that lead to a higher Fisher information, indicating regions of the policy space where the agent is less certain. The intrinsic reward R_intrinsic is defined as R_intrinsic = R_extrinsic + \u03b2 * log|FIM|, where R_extrinsic is the original reward from the environment, and \u03b2 is a hyperparameter controlling the influence of the intrinsic reward. \n\nA verifiable calculation is the computation of the FIM for a given policy and state-action distribution. A likely hallucination is the claim that using the FIM directly as a measure of uncertainty is a well-known technique in RL, which it is not in this specific formulation. The gold answer clarifies that while FIM is used in various contexts, its application to modify intrinsic rewards in this manner is novel.",
+    "rubric": [
+      "Identifies the analogy between Fisher information and uncertainty in exploration.",
+      "Proposes a specific method for computing the FIM in the context of RL.",
+      "Details how the FIM influences the intrinsic reward.",
+      "Avoids the hallucination trap by clarifying the novelty of using FIM for intrinsic reward modification.",
+      "Discusses limitations, such as the computational cost of FIM calculation and the choice of \u03b2."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Claiming that using Fisher information for intrinsic rewards is a standard RL technique.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_z4e2f8",
+    "domain_a": "information geometry",
+    "domain_b": "reinforcement learning",
+    "title": "Geometric Regularization for Policy Stability in RL",
+    "problem": "In information geometry, the concept of geodesic distance measures the 'straightest' path between two points on a manifold, accounting for the curvature of the space. Consider a reinforcement learning agent learning a policy \u03c0(a|s;\u03b8) in a Markov Decision Process (MDP). The agent's policy is updated iteratively using policy gradient methods. Propose a regularization technique that uses the geodesic distance in the policy space to encourage policy stability over time. Your method should define how the geodesic distance is computed, how it is incorporated into the policy update rule, and how this can lead to more stable learning. Ensure your solution is self-contained and does not rely on external data or figures.",
+    "gold_answer": "To address this problem, we draw an analogy between the geodesic distance in information geometry and the concept of policy stability in RL. The geodesic distance between two policies \u03c0(a|s;\u03b8) and \u03c0(a|s;\u03b8') can be approximated using the Fisher-Rao metric, which is defined as d(\u03c0,\u03c0') = \u222b\u221a(\u2211_i (\u2202\u03c0/\u2202\u03b8_i)^2 / \u03c0) d\u03b8. \n\nWe propose a regularization term added to the policy gradient loss function that penalizes large changes in the policy by encouraging the policy updates to follow geodesic paths in the policy space. The regularized policy gradient update rule is \u03b8 <- \u03b8 + \u03b1\u2207_\u03b8 J(\u03c0) - \u03bbd(\u03c0,\u03c0_old), where J(\u03c0) is the expected return, \u03b1 is the learning rate, \u03bb is a hyperparameter controlling the strength of the regularization, and \u03c0_old is the policy from the previous iteration. \n\nA verifiable calculation is the computation of the Fisher-Rao metric for two policies. A likely hallucination is the claim that using geodesic distances for policy regularization is a widely used technique in RL, which it is not in this specific formulation. The gold answer clarifies that while the Fisher-Rao metric is used in various contexts, its application to policy regularization in this manner is novel.",
+    "rubric": [
+      "Identifies the analogy between geodesic distance and policy stability.",
+      "Proposes a specific method for computing the Fisher-Rao metric in the context of RL.",
+      "Details how the Fisher-Rao metric is incorporated into the policy update rule.",
+      "Avoids the hallucination trap by clarifying the novelty of using geodesic distances for policy regularization.",
+      "Discusses limitations, such as the computational cost of Fisher-Rao metric calculation and the choice of \u03bb."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Claiming that using geodesic distances for policy regularization is a standard RL technique.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_homdb1",
+    "domain_a": "homological algebra",
+    "domain_b": "databases",
+    "title": "Persistent Homology for Query Optimization",
+    "problem": "In homological algebra, persistent homology is a method for studying the topological features of a space at different scales. In databases, query optimization seeks to find the most efficient way to execute a query. Propose a novel approach to use persistent homology to optimize SQL queries by analyzing the topological structure of the query execution plans. Specifically, consider how the Betti numbers (a measure of topological features) could inform the selection of join orders or index usage. Your solution should include a specific calculation of Betti numbers for a sample query execution plan and discuss how these numbers could guide optimization decisions.",
+    "gold_answer": "The analogy here is between the topological features captured by persistent homology and the structural features of query execution plans. The specific named technique from databases is query optimization using cost-based optimization. To perform the verifiable derivation, we calculate the Betti numbers for a sample query execution plan involving multiple joins. For instance, consider a query joining three tables A, B, and C. We represent the execution plan as a simplicial complex where each join is an edge, and each table is a vertex. We then compute the Betti numbers of this complex at different scales (e.g., different join orders). The first Betti number (\u03b21) indicates the number of independent cycles in the plan, which can inform the choice of join order to minimize the number of intermediate results. The most likely hallucination an LLM would emit is suggesting the direct application of persistent homology algorithms without considering the specific cost metrics used in query optimization. The correct approach requires translating topological insights into cost-based decisions.",
+    "rubric": [
+      "Identifies the analogy between topological features and query execution plan structures.",
+      "Correctly names the technique from databases: query optimization using cost-based optimization.",
+      "Performs the verifiable derivation: calculation of Betti numbers for a sample query execution plan.",
+      "Avoids the hallucination trap: direct application of persistent homology algorithms without cost-based translation.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Suggesting the direct application of persistent homology algorithms without considering the specific cost metrics used in query optimization.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_ctlepid",
+    "domain_a": "control theory",
+    "domain_b": "epidemiology",
+    "title": "Designing a Control Strategy for Epidemic Mitigation",
+    "problem": "Consider a scenario where an infectious disease is spreading in a population. The spread can be modeled as a dynamical system where the state represents the number of infected individuals at any given time. Your task is to design a control strategy that minimizes the number of infected individuals over a finite time horizon. Specifically, you need to determine the optimal timing and magnitude of interventions (e.g., lockdowns, vaccination campaigns) to apply to the system. Use techniques from control theory to approach this problem, drawing analogies to established methods in epidemiology. The control strategy should be designed to handle uncertainties in the infection rate and the effectiveness of interventions.",
+    "gold_answer": "To design an optimal control strategy for epidemic mitigation, we draw an analogy between the dynamical system representing the spread of the disease and a linear time-invariant (LTI) system in control theory. The state of the system is the number of infected individuals, and the control inputs are the interventions. We use the concept of **optimal control** from control theory, specifically the **Linear Quadratic Regulator (LQR)** framework, to determine the optimal timing and magnitude of interventions.\n\n1. **Analogy**: The spread of the disease is analogous to the dynamics of an LTI system, where the state transition matrix represents the infection rate, and the control matrix represents the effectiveness of interventions.\n2. **Technique**: We apply the LQR framework to minimize a cost function that balances the number of infected individuals and the cost of interventions.\n3. **Verifiable Derivation**: The cost function J is given by J = \u222b(x^T Q x + u^T R u) dt, where x is the state vector (number of infected individuals), u is the control input (interventions), Q is a weight matrix on the state, and R is a weight matrix on the control. The optimal control u* is derived as u* = -Kx, where K is the gain matrix obtained by solving the Riccati equation.\n4. **Hallucination Trap**: An LLM might incorrectly suggest using a simple threshold-based intervention strategy, which does not account for the dynamic nature of the epidemic spread and the optimal control framework.\n5. **Limitations**: The analogy assumes a linear relationship between the state and control inputs, which may not hold in complex epidemic scenarios. Additionally, the effectiveness of interventions may vary over time, which is not captured in the LTI model.",
+    "rubric": [
+      "Identifies the analogy between the spread of the disease and an LTI system.",
+      "Correctly names the technique from control theory: Linear Quadratic Regulator (LQR).",
+      "Performs the verifiable derivation: Derives the cost function and the optimal control law.",
+      "Avoids the hallucination trap: Does not suggest a simple threshold-based intervention strategy.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might incorrectly suggest using a simple threshold-based intervention strategy.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_epictl",
+    "domain_a": "epidemiology",
+    "domain_b": "control theory",
+    "title": "Stability Analysis of an Epidemic Model with Control",
+    "problem": "Consider an epidemic model described by a set of differential equations that capture the dynamics of susceptible, infected, and recovered individuals (SIR model). Introduce a control input representing public health interventions (e.g., vaccination, social distancing). Analyze the stability of the system when the control input is applied. Use techniques from control theory to determine the conditions under which the system returns to a disease-free equilibrium. Your analysis should include a discussion of the eigenvalues of the system matrix and the role of the control input in achieving stability.",
+    "gold_answer": "To analyze the stability of the epidemic model with control, we draw an analogy between the SIR model and a linear system in control theory. The state variables are the susceptible, infected, and recovered populations, and the control input represents public health interventions. We use the concept of **eigenvalue analysis** from control theory to determine the conditions for stability.\n\n1. **Analogy**: The SIR model is analogous to a linear system where the state transition matrix represents the interaction between susceptible, infected, and recovered populations, and the control matrix represents the effect of interventions.\n2. **Technique**: We perform an eigenvalue analysis of the system matrix to determine the stability of the disease-free equilibrium.\n3. **Verifiable Derivation**: The system matrix A is derived from the differential equations of the SIR model. The eigenvalues of A are calculated, and the conditions for stability (all eigenvalues having negative real parts) are determined. The control input is incorporated into the system matrix, and its effect on the eigenvalues is analyzed.\n4. **Hallucination Trap**: An LLM might incorrectly suggest that any positive control input will always stabilize the system, ignoring the specific conditions required for eigenvalue placement.\n5. **Limitations**: The analogy assumes a linear approximation of the SIR model, which may not hold for large perturbations. Additionally, the model does not account for demographic changes or time-varying control inputs.",
+    "rubric": [
+      "Identifies the analogy between the SIR model and a linear system.",
+      "Correctly names the technique from control theory: Eigenvalue analysis.",
+      "Performs the verifiable derivation: Calculates the eigenvalues of the system matrix and determines the conditions for stability.",
+      "Avoids the hallucination trap: Does not suggest that any positive control input will always stabilize the system.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might incorrectly suggest that any positive control input will always stabilize the system.",
+    "estimated_baseline_accuracy": 35
+  },
+  {
+    "id": "pg_ts1234",
+    "domain_a": "topology",
+    "domain_b": "sensor networks",
+    "title": "Using Sensor Network Protocols to Analyze Topological Spaces",
+    "problem": "Consider a topological space represented as a simplicial complex, where each simplex corresponds to a sensor node and each face to a communication link between nodes. Propose a method to determine the homology groups of this simplicial complex using a consensus algorithm typically used in sensor networks. Specifically, describe how a distributed consensus algorithm like the Average Consensus can be adapted to compute the Betti numbers of the simplicial complex. Ensure your solution is self-contained and does not rely on external references.",
+    "gold_answer": "To determine the homology groups of a simplicial complex using a distributed consensus algorithm, we draw an analogy between the communication links in a sensor network and the simplices in a topological space. The Average Consensus algorithm, which is used to achieve agreement among sensor nodes, can be adapted to perform local computations that collectively reveal global topological properties.\n\n**Cross-domain analogy:** The communication links in a sensor network are analogous to the faces in a simplicial complex, and the nodes are analogous to the vertices.\n\n**Named technique from sensor networks:** Average Consensus algorithm.\n\n**Verifiable derivation:** Each node in the sensor network maintains a local copy of the boundary matrix of the simplicial complex. Nodes exchange boundary information with their neighbors and perform local computations to update their matrices. The Average Consensus algorithm ensures that all nodes eventually agree on the reduced boundary matrix, from which the Betti numbers can be computed.\n\n**Hallucination trap:** An LLM might suggest using a flocking algorithm, which is designed for coordinated movement rather than consensus on computational results. The gold answer flags this by emphasizing the need for a consensus algorithm that specifically handles numerical agreement across nodes.\n\n**Limitations:** This approach assumes that the sensor network is fully connected and that all nodes can communicate with each other, which may not hold in practical scenarios. Additionally, the computational complexity of maintaining and updating the boundary matrix can be significant.",
+    "rubric": [
+      "Identifies the analogy between communication links and simplices.",
+      "Correctly names the Average Consensus algorithm.",
+      "Performs the verifiable derivation: local computation of the boundary matrix and consensus on the reduced matrix.",
+      "Avoids the hallucination trap: does not suggest using a flocking algorithm.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might incorrectly suggest using a flocking algorithm for consensus.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_ts5678",
+    "domain_a": "topology",
+    "domain_b": "sensor networks",
+    "title": "Applying Coverage Algorithms from Sensor Networks to Topological Data Analysis",
+    "problem": "In topological data analysis (TDA), one often needs to cover a dataset with a collection of balls (or simplices) to construct a Vietoris-Rips complex. Propose a method to optimize this coverage using an algorithm from sensor network coverage optimization. Specifically, describe how the Barrier Coverage algorithm can be used to ensure that the dataset is adequately covered with the minimal number of balls. Provide a concrete example with a dataset of 5 points in 2D space and specify the radius of the balls to be used.",
+    "gold_answer": "To optimize the coverage of a dataset in topological data analysis using a sensor network coverage algorithm, we can apply the Barrier Coverage algorithm. This algorithm, which is used to ensure that a sensor network provides complete coverage of an area, can be adapted to select the minimal set of balls that cover the dataset points.\n\n**Cross-domain analogy:** The area to be covered by sensors is analogous to the dataset space, and the sensors are analogous to the centers of the balls.\n\n**Named technique from sensor networks:** Barrier Coverage algorithm.\n\n**Verifiable derivation:** Given a dataset of 5 points in 2D space, we calculate the pairwise distances between points. We then apply the Barrier Coverage algorithm to select a subset of points to serve as ball centers, ensuring that all points are within the specified radius of at least one ball. For example, if the radius is set to 2 units, the algorithm would select a minimal set of points such that all points are within 2 units of a selected center.\n\n**Hallucination trap:** An LLM might suggest using a Voronoi diagram, which partitions the space but does not guarantee coverage with a minimal number of balls. The gold answer flags this by emphasizing the need for an algorithm that specifically optimizes coverage.\n\n**Limitations:** This approach assumes that the dataset is finite and that the points can be represented in a Euclidean space. Additionally, the choice of radius can significantly affect the coverage and the number of balls required.",
+    "rubric": [
+      "Identifies the analogy between the area to be covered and the dataset space.",
+      "Correctly names the Barrier Coverage algorithm.",
+      "Performs the verifiable derivation: selection of ball centers and coverage with a specified radius.",
+      "Avoids the hallucination trap: does not suggest using a Voronoi diagram.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might incorrectly suggest using a Voronoi diagram for coverage optimization.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_ntpq1",
+    "domain_a": "number theory",
+    "domain_b": "post-quantum cryptography",
+    "title": "Securing Lattice-Based Cryptography with Modular Arithmetic",
+    "problem": "Consider a lattice-based cryptographic scheme where the security relies on the hardness of the Shortest Vector Problem (SVP) in a high-dimensional lattice. The scheme employs modular arithmetic to obscure the lattice structure. Specifically, the lattice vectors are mapped into a finite field using a large prime modulus p. Investigate how the choice of modulus p affects the security of the scheme against quantum attacks. Derive a quantitative bound on the modulus size required to ensure security, considering both classical and quantum adversaries. Discuss potential pitfalls and limitations of this approach.",
+    "gold_answer": "To secure the lattice-based cryptographic scheme against quantum attacks, we draw upon techniques from post-quantum cryptography, specifically the use of structured lattices and the hardness of problems like Learning With Errors (LWE). The choice of modulus p is critical: it must be large enough to resist both classical and quantum attacks. A suitable bound for p can be derived from the LWE problem's parameters, where the dimension n and the error distribution \ud835\udf12 determine the security level. Specifically, p should be at least 2^n to ensure that the modular reduction does not leak information about the lattice structure. An LLM might incorrectly suggest using a generic large prime without considering the specific parameters of the LWE problem, leading to an insecure choice of p. The correct approach involves a careful balance between the dimension of the lattice, the error distribution, and the modulus size, ensuring that the resulting problem remains hard for both classical and quantum adversaries.",
+    "rubric": [
+      "Identifies the analogy between lattice problems in number theory and LWE in post-quantum cryptography.",
+      "Correctly names the technique from post-quantum cryptography: Learning With Errors (LWE).",
+      "Performs the verifiable derivation: Derives a quantitative bound on the modulus size based on LWE parameters.",
+      "Avoids the hallucination trap: Does not suggest using a generic large prime without considering LWE parameters.",
+      "Discusses limitations or scope of the analogy: Considers the balance between lattice dimension, error distribution, and modulus size."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might suggest using any large prime modulus without considering the specific parameters of the LWE problem, leading to an insecure choice.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_ntpq2",
+    "domain_a": "number theory",
+    "domain_b": "post-quantum cryptography",
+    "title": "Enhancing Ring-LWE Security with Number-Theoretic Transforms",
+    "problem": "The Ring-LWE problem is a cornerstone of many post-quantum cryptographic schemes, offering a balance between security and efficiency. However, the efficiency of these schemes often relies on fast polynomial multiplication in a ring of integers modulo a power of two. Investigate how number-theoretic transforms (NTT) can be used to enhance the security of Ring-LWE-based schemes. Specifically, analyze the impact of using NTT on the distribution of errors in the Ring-LWE problem and derive a bound on the error distribution that ensures security against quantum attacks. Discuss the potential drawbacks of this approach and any known limitations.",
+    "gold_answer": "To enhance the security of Ring-LWE-based schemes using number-theoretic transforms (NTT), we leverage the structural properties of polynomial rings and the hardness of the Ring-LWE problem. The NTT allows for efficient polynomial multiplication, which is crucial for the performance of these schemes. However, the use of NTT must be carefully managed to avoid leaking information about the error distribution. A bound on the error distribution can be derived from the parameters of the Ring-LWE problem, ensuring that the resulting distribution remains pseudorandom and indistinguishable from uniform. Specifically, the error distribution should be chosen such that its NTT remains uniformly distributed, which can be achieved by selecting an appropriate error variance. An LLM might incorrectly suggest using a generic error distribution without considering the impact of NTT, leading to a vulnerable scheme. The correct approach involves a detailed analysis of the error distribution in the NTT domain, ensuring that it maintains the necessary security properties.",
+    "rubric": [
+      "Identifies the analogy between polynomial rings in number theory and the Ring-LWE problem in post-quantum cryptography.",
+      "Correctly names the technique from post-quantum cryptography: Ring-LWE.",
+      "Performs the verifiable derivation: Derives a bound on the error distribution in the NTT domain.",
+      "Avoids the hallucination trap: Does not suggest using a generic error distribution without considering the impact of NTT.",
+      "Discusses limitations or scope of the analogy: Considers the impact of NTT on the error distribution and any known limitations."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might suggest using a generic error distribution without considering the impact of number-theoretic transforms (NTT), leading to a vulnerable scheme.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_7b3c2d",
+    "domain_a": "game semantics",
+    "domain_b": "program synthesis",
+    "title": "Synthesizing Strategies for Game Semantics Using Program Synthesis",
+    "problem": "In game semantics, a strategy is a function that determines a player's moves in response to the opponent's moves. Consider a two-player game where Player A and Player B take turns picking numbers from a finite set {1, 2,..., n} without replacement. The player who picks the number 1 wins. Design a synthesis algorithm that, given n, automatically generates a winning strategy for Player A if one exists. The algorithm should leverage techniques from program synthesis to create the strategy.",
+    "gold_answer": "To solve this problem, we draw an analogy between the strategy in game semantics and a program in program synthesis. The strategy can be seen as a program that takes the current state of the game (a subset of {1, 2,..., n}) and outputs the next move for Player A. We use the technique of **counterexample-guided inductive synthesis (CEGIS)** from program synthesis to generate this program. CEGIS iteratively produces candidate programs and tests them against a set of examples (game states). If a candidate program fails, a counterexample is generated to guide the synthesis of a new candidate. The key calculation here is determining the set of examples that sufficiently cover the game states to ensure the synthesized program is correct. A common hallucination is to assume that a simple heuristic (e.g., always picking the smallest available number) will work, which fails for n > 2. The correct strategy involves more complex logic that can be derived using CEGIS.",
+    "rubric": [
+      "Identifies the analogy between game strategies and programs.",
+      "Correctly names the technique from program synthesis: counterexample-guided inductive synthesis (CEGIS).",
+      "Performs the verifiable derivation: determining the set of examples that cover the game states.",
+      "Avoids the hallucination trap: assuming a simple heuristic will work for all n.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Assuming a simple heuristic (e.g., always picking the smallest available number) will work for all n.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_ncg001",
+    "domain_a": "non-commutative geometry",
+    "domain_b": "fault-tolerant quantum computing",
+    "title": "Applying Quantum Error Correction to Non-Commutative Spectral Geometry",
+    "problem": "In non-commutative geometry, one studies spaces where the algebra of functions is non-commutative. Consider a non-commutative spectral triple (A, H, D) where A is a non-commutative algebra, H is a Hilbert space, and D is a self-adjoint operator on H with compact resolvent. Suppose we want to compute the spectral dimension of this triple, which involves analyzing the asymptotic behavior of the eigenvalue distribution of D. However, due to noise in the system, the eigenvalues are perturbed. Design a method inspired by quantum error correction techniques to robustly estimate the spectral dimension despite these perturbations. Specifically, describe how stabilizer codes, commonly used in fault-tolerant quantum computing, can be adapted to this problem. Ensure your method includes a verifiable calculation of the corrected spectral dimension and discuss any potential pitfalls an LLM might confidently but incorrectly assert.",
+    "gold_answer": "To apply quantum error correction to non-commutative spectral geometry, we draw an analogy between the perturbed eigenvalues of the operator D and the noisy quantum states in a quantum computation. We use stabilizer codes to correct the perturbations. First, we encode the eigenvalues using a stabilizer code, such as the Shor code, which can correct for errors. Next, we measure the syndrome of the encoded eigenvalues to detect errors. Using the syndrome information, we apply correction operators to recover the original eigenvalues. The spectral dimension can then be computed from the corrected eigenvalues. A verifiable calculation involves checking the asymptotic behavior of the corrected eigenvalues against known results for the unperturbed case. An LLM might incorrectly assert that any quantum error correction code can be directly applied without considering the specific properties of the non-commutative algebra and the operator D. This is a hallucination trap, as the choice of code and the encoding process must be carefully tailored to the geometric structure of the spectral triple.",
+    "rubric": [
+      "Identifies the analogy between perturbed eigenvalues and noisy quantum states.",
+      "Correctly names the technique from fault-tolerant quantum computing: stabilizer codes.",
+      "Performs the verifiable derivation: calculation of the corrected spectral dimension.",
+      "Avoids the hallucination trap: directly applying any quantum error correction code without consideration of the geometric structure.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might assert that any quantum error correction code can be directly applied without considering the specific properties of the non-commutative algebra and the operator D.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_mtsa1",
+    "domain_a": "measure theory",
+    "domain_b": "streaming algorithms",
+    "title": "Measuring Variance in a Data Stream",
+    "problem": "Consider a data stream consisting of real numbers, arriving one at a time. You are tasked with estimating the variance of the numbers in the stream using a streaming algorithm. Specifically, you want to maintain a small-space summary of the stream that allows you to approximate the variance at any point in time. Formulate a streaming algorithm that achieves this, drawing inspiration from measure theory concepts such as the Lebesgue measure and integration. Discuss the limitations of your approach and the trade-offs involved.",
+    "gold_answer": "To estimate the variance in a data stream, we can draw an analogy between the measure-theoretic concept of integration and the accumulation of moments in a streaming algorithm. Specifically, we can maintain a running sum of the data points (akin to the integral of a function) and a running sum of their squares. Let's denote the data points as x_1, x_2,..., x_n. We maintain two variables: S = x_1 + x_2 +... + x_n (the sum of the data points) and S_sq = x_1^2 + x_2^2 +... + x_n^2 (the sum of the squares of the data points). At any point, the mean can be estimated as \u03bc = S/n and the variance as \u03c3^2 = (S_sq/n) - \u03bc^2. This approach requires O(1) space and O(1) update time per data point, making it suitable for a streaming setting. The most likely hallucination an LLM might emit is suggesting the use of a complex, named technique from measure theory that doesn't translate well to the streaming context, such as the Radon-Nikodym derivative. The correct approach is simpler and more direct, leveraging basic measure-theoretic concepts in a novel way.",
+    "rubric": [
+      "Identifies the analogy between integration in measure theory and accumulation of moments in streaming algorithms.",
+      "Correctly names the technique from streaming algorithms: maintaining running sums.",
+      "Performs the verifiable derivation: calculating the mean and variance from the maintained sums.",
+      "Avoids the hallucination trap: does not suggest complex measure-theoretic concepts like the Radon-Nikodym derivative.",
+      "Discusses limitations or scope of the analogy: acknowledges the simplicity and directness of the approach."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Suggesting the use of the Radon-Nikodym derivative for variance estimation in a streaming context.",
+    "estimated_baseline_accuracy": 35
+  },
+  {
+    "id": "pg_mtsa2",
+    "domain_a": "measure theory",
+    "domain_b": "streaming algorithms",
+    "title": "Approximating the Lebesgue Measure of a Streamed Set",
+    "problem": "Imagine receiving a data stream where each element represents a point in a d-dimensional space. Your goal is to approximate the Lebesgue measure (volume) of the convex hull of these points using a streaming algorithm. Design an algorithm that can process each point in the stream in constant time and space, providing an approximation of the volume at any point. Discuss the challenges and potential inaccuracies introduced by the streaming nature of the data.",
+    "gold_answer": "To approximate the Lebesgue measure of the convex hull of points in a stream, we can adapt the concept of measure-theoretic outer measure to the streaming context. Specifically, we can maintain a set of 'core points' that represent the current approximation of the convex hull. As each new point arrives, we check if it lies outside the convex hull formed by the core points. If it does, we update the core points to include this new point, effectively expanding the convex hull. The volume of the convex hull can be approximated using the determinant of the matrix formed by the core points (after centering them). This approach requires careful management of the core points to ensure constant-time updates, possibly using a data structure like a k-d tree. The most likely hallucination an LLM might emit is suggesting a direct application of the Lebesgue measure definition, which is computationally infeasible in a streaming context. The correct approach involves a novel adaptation of measure-theoretic concepts to the constraints of streaming algorithms.",
+    "rubric": [
+      "Identifies the analogy between the Lebesgue measure and the volume of the convex hull in a streaming context.",
+      "Correctly names the technique from streaming algorithms: maintaining a set of core points.",
+      "Performs the verifiable derivation: calculating the volume using the determinant of the matrix formed by the core points.",
+      "Avoids the hallucination trap: does not suggest a direct application of the Lebesgue measure definition.",
+      "Discusses limitations or scope of the analogy: acknowledges the challenges of maintaining the core points and the potential inaccuracies in volume approximation."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Suggesting a direct application of the Lebesgue measure definition in a streaming context.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_mtsa3",
+    "domain_a": "measure theory",
+    "domain_b": "streaming algorithms",
+    "title": "Estimating the Entropy of a Data Stream",
+    "problem": "Given a data stream consisting of symbols from a finite alphabet, design a streaming algorithm to estimate the entropy of the stream. Entropy, in this context, is a measure-theoretic concept that quantifies the uncertainty or information content of the stream. Your algorithm should use a small, fixed amount of memory and be able to provide an estimate of the entropy at any point in the stream. Discuss the challenges in estimating entropy in a streaming context and the trade-offs involved.",
+    "gold_answer": "To estimate the entropy of a data stream, we can draw an analogy between the measure-theoretic concept of entropy and the frequency distribution of symbols in the stream. Specifically, we maintain a count of the occurrences of each symbol in the stream. Let p_i be the estimated probability of symbol i, calculated as the count of i divided by the total count of symbols seen so far. The entropy H can be estimated as H = -\u2211 p_i log(p_i). This approach requires maintaining a count for each symbol, which can be done in O(1) space per symbol and O(1) update time per data point. The most likely hallucination an LLM might emit is suggesting the use of a complex, named technique from information theory that doesn't translate well to the streaming context, such as the Kullback-Leibler divergence. The correct approach is simpler and more direct, leveraging basic measure-theoretic concepts in a novel way.",
+    "rubric": [
+      "Identifies the analogy between entropy in measure theory and frequency distribution in a streaming context.",
+      "Correctly names the technique from streaming algorithms: maintaining symbol counts.",
+      "Performs the verifiable derivation: calculating the entropy from the estimated probabilities.",
+      "Avoids the hallucination trap: does not suggest complex information-theoretic concepts like the Kullback-Leibler divergence.",
+      "Discusses limitations or scope of the analogy: acknowledges the simplicity and directness of the approach."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Suggesting the use of the Kullback-Leibler divergence for entropy estimation in a streaming context.",
+    "estimated_baseline_accuracy": 40
+  },
+  {
+    "id": "pg_d6gcv1",
+    "domain_a": "differential geometry",
+    "domain_b": "computer vision",
+    "title": "Geodesic Paths in Image Segmentation",
+    "problem": "In differential geometry, a geodesic path represents the shortest path between two points on a curved surface. In computer vision, image segmentation involves partitioning an image into meaningful segments. Consider an image represented as a height map where pixel intensities correspond to elevations. Propose a method to use geodesic paths to enhance image segmentation. Specifically, describe how you would compute geodesic distances on this height map to improve the segmentation of regions that are topologically complex. Ensure your solution is novel and does not rely on existing named algorithms.",
+    "gold_answer": "To enhance image segmentation using geodesic paths, we draw an analogy between the geodesic distance in differential geometry and the shortest path in a weighted graph, a concept from computer vision. We represent the image as a graph where each pixel is a node, and the edge weights correspond to the Euclidean distance between pixel intensities. The geodesic distance between two pixels is then the shortest path in this graph, computed using Dijkstra's algorithm.\n\nA key calculation is the construction of the graph and the application of Dijkstra's algorithm to find the shortest paths. The verifiable correctness anchor is the specific path lengths computed, which should match the expected geodesic distances on the height map.\n\nA common hallucination trap is to suggest using a simple thresholding technique for segmentation, which ignores the complex topological structure of the image. The gold answer explicitly avoids this by focusing on the computation of geodesic distances.\n\nLimitations include the computational complexity of Dijkstra's algorithm on large graphs and the sensitivity of the method to noise in the height map.",
+    "rubric": [
+      "Identifies the analogy between geodesic paths and shortest paths in a graph.",
+      "Correctly names the technique from computer vision: Dijkstra's algorithm.",
+      "Performs the verifiable derivation: computation of specific path lengths.",
+      "Avoids the hallucination trap: does not suggest simple thresholding.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Suggesting simple thresholding for segmentation instead of computing geodesic distances.",
+    "estimated_baseline_accuracy": 35
+  },
+  {
+    "id": "pg_q0s1h2",
+    "domain_a": "queueing theory",
+    "domain_b": "operating systems schedulers",
+    "title": "Optimizing Multi-Server Queue with Preemptive Scheduling",
+    "problem": "Consider a multi-server queue system where customers arrive according to a Poisson process with rate \u03bb. Each server has an exponential service time with rate \u03bc. The system employs a preemptive resume scheduling policy where a higher-priority customer can interrupt a lower-priority customer's service. We aim to minimize the average waiting time in the system. Identify a technique from operating systems schedulers that can be applied to optimize this multi-server queue system. Derive the average waiting time using this technique and discuss potential pitfalls an LLM might fall into when suggesting a solution.",
+    "gold_answer": "The analogy here is between the preemptive resume scheduling in queueing theory and the Shortest Remaining Time First (SRTF) scheduling algorithm in operating systems. SRTF minimizes average waiting time by always selecting the job with the shortest remaining processing time.\n\nTo apply SRTF to our queueing system, we model each customer as a job with a remaining service time. When a higher-priority customer arrives, the current service is preempted, and the new customer is served first.\n\nThe average waiting time W can be derived using the Pollaczek-Khinchine formula adapted for preemptive scheduling:\n\nW = (\u03bb / (\u03bc * (\u03bc - \u03bb))) * (1 + (\u03c1 / (1 - \u03c1)))\n\nwhere \u03c1 = \u03bb / (s * \u03bc) is the utilization factor, and s is the number of servers.\n\nA common hallucination is suggesting the use of Round Robin (RR) scheduling, which is not optimal for minimizing waiting time in this context. RR ensures fairness but does not minimize waiting time like SRTF does.",
+    "rubric": [
+      "Identifies the analogy between preemptive resume scheduling and SRTF.",
+      "Correctly names the technique from operating systems schedulers: Shortest Remaining Time First (SRTF).",
+      "Performs the verifiable derivation: Pollaczek-Khinchine formula adapted for preemptive scheduling.",
+      "Avoids the hallucination trap: Incorrect suggestion of Round Robin (RR) scheduling.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might incorrectly suggest using Round Robin (RR) scheduling for minimizing waiting time.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_md002",
+    "domain_a": "mechanism design",
+    "domain_b": "blockchain consensus",
+    "title": "Designing a Fair Allocation Mechanism for Blockchain Mining Rewards",
+    "problem": "In a blockchain network, miners compete to solve cryptographic puzzles to add new blocks to the chain and earn rewards. Design a fair allocation mechanism for these rewards that ensures all participants have an equal chance of receiving rewards, regardless of their computational power. Your mechanism should leverage concepts from both mechanism design and blockchain consensus to achieve this goal. Provide a specific calculation or bound that verifies the fairness of the allocation.",
+    "gold_answer": "To design a fair allocation mechanism for blockchain mining rewards, we can use the concept of proportional justice from mechanism design and apply it to the Proof-of-Work (PoW) consensus mechanism. We propose a mechanism where each miner's reward is proportional to the amount of work they contribute to the network, measured in hash power. To ensure fairness, we introduce a randomized selection process where each miner has an equal probability of being chosen to add a block, regardless of their hash power. This can be achieved using a lottery-based mechanism similar to Proof-of-Stake (PoS), but adapted for PoW. The specific calculation involves deriving the expected reward for each miner based on their hash power and the randomized selection process. An LLM might hallucinate that a fixed reward per block is fair, but this would disadvantage miners with lower hash power. The correct approach involves a dynamic reward system based on contributions.",
+    "rubric": [
+      "Identifies the analogy between proportional justice in mechanism design and PoW in blockchain consensus.",
+      "Correctly names the technique from blockchain consensus: Proof-of-Work (PoW) with a randomized selection process.",
+      "Performs the verifiable derivation: Expected reward calculation based on hash power and randomized selection.",
+      "Avoids the hallucination trap: Fixed reward per block is not fair; dynamic reward system is required.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "An LLM might incorrectly assert that a fixed reward per block is a fair allocation mechanism for blockchain mining rewards.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_ecbio1",
+    "domain_a": "error-correcting codes",
+    "domain_b": "biological information storage",
+    "title": "Analogy Between Hamming Code and DNA Repair Mechanisms",
+    "problem": "Consider the problem of error correction in a communication channel using Hamming codes. Now, draw an analogy between the error-correction process in Hamming codes and the DNA repair mechanisms found in biological systems. Specifically, describe how a single-bit error in a Hamming-coded message can be analogously mapped to a single-nucleotide polymorphism (SNP) in DNA. Propose a method inspired by DNA repair mechanisms to detect and correct such errors in a Hamming-coded message. Your method should detail the specific steps involved and the expected outcome. Additionally, discuss the limitations of this analogy and potential pitfalls, particularly focusing on a common but incorrect assumption about the efficiency of DNA repair mechanisms in correcting all types of mutations.",
+    "gold_answer": "The analogy between Hamming codes and DNA repair mechanisms lies in their shared goal of maintaining data integrity despite errors. In Hamming codes, a single-bit error can be detected and corrected using parity checks and the Hamming distance. Similarly, in DNA, SNPs can be detected and sometimes corrected through DNA repair mechanisms such as base excision repair (BER). Inspired by BER, a method for correcting single-bit errors in Hamming-coded messages could involve a 'parity check' step that identifies the erroneous bit, followed by a 'correction' step that flips the bit to its correct value based on the parity checks. A verifiable calculation here would be the specific bit position identified for correction, based on the syndrome derived from the parity checks. The hallucination trap to avoid is the assumption that DNA repair mechanisms are always successful in correcting mutations, which is not true for all types of DNA damage. This analogy's limitations include the complexity of DNA repair, which involves multiple pathways and enzymes, unlike the relatively straightforward process in Hamming codes.",
+    "rubric": [
+      "Identifies the analogy between Hamming code error correction and DNA repair mechanisms.",
+      "Proposes a method for correcting errors in Hamming-coded messages inspired by DNA repair, detailing specific steps.",
+      "Performs the verifiable calculation: Identifies the specific bit position for correction based on parity checks.",
+      "Avoids the hallucination trap: Does not assume all DNA mutations are correctable.",
+      "Discusses limitations or scope of the analogy, including the complexity of DNA repair."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Assuming DNA repair mechanisms can correct all types of mutations.",
+    "estimated_baseline_accuracy": 35
+  },
+  {
+    "id": "pg_ecbio2",
+    "domain_a": "error-correcting codes",
+    "domain_b": "biological information storage",
+    "title": "Cross-Domain Synthesis: Turbo Codes and Epigenetic Memory",
+    "problem": "Explore the potential analogy between turbo codes, a class of error-correcting codes known for their high efficiency, and the concept of epigenetic memory in biological systems. Specifically, consider how the iterative decoding process in turbo codes, which involves passing messages between decoders, can be analogously mapped to the way epigenetic marks can influence gene expression over generations. Propose a conceptual framework that uses insights from turbo codes to model the propagation of epigenetic information. Your framework should detail the specific components and processes involved, including a verifiable quantitative measure of the framework's effectiveness. Highlight a common misconception about turbo codes that an LLM might confidently but incorrectly assert, and discuss the limitations of applying this analogy.",
+    "gold_answer": "The analogy between turbo codes and epigenetic memory lies in their iterative nature and the way information is propagated and refined. In turbo codes, iterative decoding involves passing messages between two or more decoders, gradually improving the accuracy of error correction. Similarly, epigenetic marks can influence gene expression patterns across generations, with the 'message' being the epigenetic state and the 'decoding' being the gene expression outcome. A conceptual framework inspired by turbo codes could model the propagation of epigenetic information by simulating iterative 'decoding' steps that adjust gene expression based on the current epigenetic state. A verifiable quantitative measure could be the reduction in error rate (in the case of turbo codes) or the stability of gene expression patterns over generations. The hallucination trap to avoid is the misconception that turbo codes always achieve perfect error correction, which is not true in all cases. This analogy's limitations include the vastly different scales and mechanisms involved in error correction in turbo codes versus epigenetic memory propagation.",
+    "rubric": [
+      "Identifies the analogy between turbo codes and epigenetic memory.",
+      "Proposes a conceptual framework for modeling the propagation of epigenetic information inspired by turbo codes.",
+      "Performs the verifiable calculation: Quantifies the reduction in error rate or stability of gene expression patterns.",
+      "Avoids the hallucination trap: Does not assume turbo codes always achieve perfect error correction.",
+      "Discusses limitations or scope of the analogy, including the different scales and mechanisms involved."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Assuming turbo codes always achieve perfect error correction.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_678xyz",
+    "domain_a": "ergodic theory",
+    "domain_b": "online learning regret bounds",
+    "title": "Ergodic Measures and Dynamic Regret in Non-Stationary Environments",
+    "problem": "Consider a dynamical system described by a measure-preserving transformation T on a probability space (X, \u03bc). Suppose we are interested in the long-term behavior of an observable function f: X \u2192 \u211d under repeated applications of T. In ergodic theory, an invariant measure \u03bc is said to be ergodic if for any measurable set A \u2286 X, the time average of the indicator function 1_A converges to the space average \u03bc(A) for \u03bc-almost every point x \u2208 X.\n\nNow, consider an online learning scenario where at each time step t, a learner receives a loss function \u2113_t: \u0398 \u2192 \u211d, where \u0398 is a compact parameter space. The learner selects a parameter \u03b8_t \u2208 \u0398 and incurs loss \u2113_t(\u03b8_t). The dynamic regret of the learner is defined as the difference between the cumulative loss incurred by the learner and the cumulative loss of the best parameter in hindsight, i.e., R_T = \u2211_{t=1}^{T} (\u2113_t(\u03b8_t) - \u2113_t(\u03b8*)), where \u03b8* minimizes \u2211_{t=1}^{T} \u2113_t(\u03b8).\n\nPropose a method to bound the dynamic regret R_T by leveraging the properties of ergodic measures. Specifically, show how the ergodic theorem can be used to provide a bound on R_T when the loss functions \u2113_t are generated by a measure-preserving transformation similar to T. Discuss the conditions under which such a bound is tight and identify any potential pitfalls or limitations of this approach.\n\nNote: A common misstep is to directly apply the ergodic theorem to the loss functions without considering the non-stationarity of the online learning environment. Be cautious of this potential hallucination.",
+    "gold_answer": "To bound the dynamic regret R_T using ergodic theory, we draw an analogy between the invariant measure in ergodic theory and the sequence of loss functions in online learning. Consider the loss functions \u2113_t as being generated by a measure-preserving transformation T on a probability space (Y, \u03bd), where Y represents the space of possible loss functions.\n\nBy the ergodic theorem, for any integrable function g: Y \u2192 \u211d, the time average of g converges to the space average \u03bd(g) for \u03bd-almost every sequence of loss functions. We can view the dynamic regret R_T as a time average of the regret at each time step.\n\nLet g_t(y) = \u2113_t(\u03b8_t) - \u2113_t(\u03b8*) for y \u2208 Y, where y represents a sequence of loss functions. If the sequence of loss functions is ergodic, then the time average of g_t converges to the space average \u03bd(g_t) for \u03bd-almost every sequence. Thus, we can bound R_T by the space average of the regret, which can be computed using the properties of the invariant measure.\n\nA verifiable calculation is the derivation of the space average \u03bd(g_t) using the ergodic theorem. A named theorem with a specific form whose application is testable is the ergodic theorem itself. The most likely hallucination an LLM would emit is directly applying the ergodic theorem to the loss functions without considering the non-stationarity of the online learning environment.\n\nLimitations of this approach include the assumption of ergodicity of the sequence of loss functions, which may not hold in practice. Additionally, the bound may be loose if the loss functions are highly non-stationary.",
+    "rubric": [
+      "Identifies the analogy between invariant measures in ergodic theory and sequences of loss functions in online learning.",
+      "Correctly names the ergodic theorem as the technique from ergodic theory.",
+      "Performs the verifiable derivation: the calculation of the space average \u03bd(g_t) using the ergodic theorem.",
+      "Avoids the hallucination trap: directly applying the ergodic theorem to the loss functions without considering the non-stationarity of the online learning environment.",
+      "Discusses limitations or scope of the analogy: the assumption of ergodicity and the potential looseness of the bound."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Directly applying the ergodic theorem to the loss functions without considering the non-stationarity of the online learning environment.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_pde01",
+    "domain_a": "PDE theory",
+    "domain_b": "neural ODE training stability",
+    "title": "Stability of PDEs vs. Neural ODEs: A Lyapunov Function Approach",
+    "problem": "Consider a linear partial differential equation (PDE) of the form \\( \frac{\\partial u}{\\partial t} = Lu \\), where \\( L \\) is a linear operator. In the context of neural ODEs, a similar form arises where the dynamics are governed by a neural network. Propose a method to analyze the stability of the equilibrium points for both systems using a Lyapunov function. Specifically, construct a Lyapunov function for a given PDE and adapt it to analyze the stability of a neural ODE. Discuss the differences and similarities in the approach and identify potential pitfalls an LLM might confidently but incorrectly assert.",
+    "gold_answer": "To analyze the stability of equilibrium points for both PDEs and neural ODEs, we can use Lyapunov functions. For a linear PDE \\( \frac{\\partial u}{\\partial t} = Lu \\), a Lyapunov function \\( V(u) \\) must satisfy \\( \frac{dV}{dt} < 0 \\) for all \\( u \neq 0 \\). A common choice is \\( V(u) = \\int_\\Omega u^T Q u \\, dx \\), where \\( Q \\) is a positive definite matrix and \\( \\Omega \\) is the domain of the PDE. The time derivative of \\( V \\) is \\( \frac{dV}{dt} = \\int_\\Omega (Lu)^T Q u + u^T Q Lu \\, dx \\). For stability, we require this to be negative definite.\n\nFor neural ODEs, the dynamics are given by \\( \frac{du}{dt} = f(u, \theta) \\), where \\( f \\) is a neural network with parameters \\( \theta \\). A Lyapunov function \\( V(u) \\) for the neural ODE must also satisfy \\( \frac{dV}{dt} < 0 \\). A candidate Lyapunov function could be \\( V(u) = u^T P u \\), where \\( P \\) is a positive definite matrix. The time derivative is \\( \frac{dV}{dt} = u^T (P f(u, \theta) + f(u, \theta)^T P) u \\). For stability, this must be negative definite.\n\nThe key difference lies in the form of \\( f(u, \theta) \\) compared to \\( Lu \\). An LLM might incorrectly assert that any Lyapunov function used for linear PDEs can be directly applied to neural ODEs without modification. This is a hallucination trap, as the non-linearity and complexity of neural networks require a more careful construction of the Lyapunov function.\n\nVerifiable correctness anchor: The specific form of the Lyapunov function and its derivative must be derived and shown to be negative definite for both systems.\n\nHallucination trap: Asserting that a Lyapunov function for linear PDEs can be directly applied to neural ODEs without modification.",
+    "rubric": [
+      "Identifies the analogy between Lyapunov functions for linear PDEs and neural ODEs.",
+      "Correctly names the technique from neural ODE training stability: Lyapunov function construction.",
+      "Performs the verifiable derivation: Derives the time derivative of the Lyapunov function and shows it is negative definite.",
+      "Avoids the hallucination trap: Does not assert that a Lyapunov function for linear PDEs can be directly applied to neural ODEs without modification.",
+      "Discusses limitations or scope of the analogy: Discusses the differences in applying Lyapunov functions to linear PDEs vs. neural ODEs."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Asserting that a Lyapunov function for linear PDEs can be directly applied to neural ODEs without modification.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_pde02",
+    "domain_a": "PDE theory",
+    "domain_b": "neural ODE training stability",
+    "title": "Spectral Properties of PDEs and Neural ODEs",
+    "problem": "Investigate the spectral properties of the linear operator \\( L \\) in a PDE \\( \frac{\\partial u}{\\partial t} = Lu \\) and compare them to the Jacobian of a neural ODE \\( \frac{du}{dt} = f(u, \theta) \\). Specifically, analyze how the eigenvalues of \\( L \\) influence the stability of the PDE and how the eigenvalues of the Jacobian influence the stability of the neural ODE. Propose a method to stabilize an unstable neural ODE by modifying its parameters \\( \theta \\) based on the spectral properties of \\( L \\). Identify potential pitfalls an LLM might confidently but incorrectly assert.",
+    "gold_answer": "The spectral properties of the linear operator \\( L \\) in a PDE \\( \frac{\\partial u}{\\partial t} = Lu \\) are crucial for determining the stability of the system. The eigenvalues of \\( L \\) must have negative real parts for the PDE to be stable. Similarly, for a neural ODE \\( \frac{du}{dt} = f(u, \theta) \\), the Jacobian \\( J = \frac{\\partial f}{\\partial u} \\) evaluated at an equilibrium point must have eigenvalues with negative real parts for the system to be stable.\n\nTo stabilize an unstable neural ODE, one can modify the parameters \\( \theta \\) to shift the eigenvalues of the Jacobian to the left half of the complex plane. This can be achieved by gradient-based optimization methods that minimize a loss function incorporating the real parts of the Jacobian's eigenvalues.\n\nAn LLM might incorrectly assert that simply adding a damping term to the neural ODE will stabilize it, without considering the specific spectral properties of the Jacobian. This is a hallucination trap, as the effectiveness of damping depends on the specific eigenvalues and their distribution.\n\nVerifiable correctness anchor: The specific calculation of the eigenvalues of the Jacobian and their modification through parameter optimization.\n\nHallucination trap: Asserting that adding a damping term to the neural ODE will stabilize it without considering the specific spectral properties of the Jacobian.",
+    "rubric": [
+      "Identifies the analogy between the eigenvalues of the linear operator \\( L \\) and the Jacobian of the neural ODE.",
+      "Correctly names the technique from neural ODE training stability: Eigenvalue analysis and parameter optimization.",
+      "Performs the verifiable derivation: Calculates the eigenvalues of the Jacobian and describes the parameter optimization process.",
+      "Avoids the hallucination trap: Does not assert that adding a damping term will stabilize the neural ODE without considering the specific spectral properties.",
+      "Discusses limitations or scope of the analogy: Discusses the differences in stabilizing linear PDEs vs. neural ODEs."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Asserting that adding a damping term to the neural ODE will stabilize it without considering the specific spectral properties of the Jacobian.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_pde03",
+    "domain_a": "PDE theory",
+    "domain_b": "neural ODE training stability",
+    "title": "Bifurcation Analysis in PDEs and Neural ODEs",
+    "problem": "Perform a bifurcation analysis on a PDE of the form \\( \frac{\\partial u}{\\partial t} = f(u, \\lambda) \\), where \\( \\lambda \\) is a bifurcation parameter. Compare this to the bifurcation analysis of a neural ODE \\( \frac{du}{dt} = g(u, \theta, \\lambda) \\), where \\( \theta \\) are the neural network parameters and \\( \\lambda \\) is a bifurcation parameter. Propose a method to detect and classify bifurcations in neural ODEs based on the bifurcation theory of PDEs. Identify potential pitfalls an LLM might confidently but incorrectly assert.",
+    "gold_answer": "Bifurcation analysis in PDEs involves studying the changes in the qualitative behavior of solutions as a parameter \\( \\lambda \\) is varied. For a PDE \\( \frac{\\partial u}{\\partial t} = f(u, \\lambda) \\), bifurcations occur when the Jacobian \\( J = \frac{\\partial f}{\\partial u} \\) evaluated at an equilibrium point has eigenvalues crossing the imaginary axis. Similarly, for a neural ODE \\( \frac{du}{dt} = g(u, \theta, \\lambda) \\), bifurcations occur when the Jacobian \\( J = \frac{\\partial g}{\\partial u} \\) evaluated at an equilibrium point has eigenvalues crossing the imaginary axis.\n\nTo detect and classify bifurcations in neural ODEs, one can use numerical methods to track the eigenvalues of the Jacobian as \\( \\lambda \\) is varied. This can be combined with techniques from PDE bifurcation theory, such as the center manifold theorem, to classify the type of bifurcation (e.g., saddle-node, transcritical, pitchfork).\n\nAn LLM might incorrectly assert that all bifurcations in neural ODEs can be detected by simply monitoring the loss function during training. This is a hallucination trap, as the loss function may not capture the subtle changes in the dynamical behavior that lead to bifurcations.\n\nVerifiable correctness anchor: The specific calculation of the eigenvalues of the Jacobian and their tracking as \\( \\lambda \\) is varied.\n\nHallucination trap: Asserting that all bifurcations in neural ODEs can be detected by simply monitoring the loss function during training.",
+    "rubric": [
+      "Identifies the analogy between bifurcation analysis in PDEs and neural ODEs.",
+      "Correctly names the technique from neural ODE training stability: Eigenvalue tracking and center manifold theorem.",
+      "Performs the verifiable derivation: Calculates the eigenvalues of the Jacobian and describes the tracking process.",
+      "Avoids the hallucination trap: Does not assert that all bifurcations can be detected by monitoring the loss function.",
+      "Discusses limitations or scope of the analogy: Discusses the differences in detecting bifurcations in PDEs vs. neural ODEs."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Asserting that all bifurcations in neural ODEs can be detected by simply monitoring the loss function during training.",
+    "estimated_baseline_accuracy": 20
+  },
+  {
+    "id": "pg_67891a",
+    "domain_a": "Bayesian nonparametrics",
+    "domain_b": "compiler optimization heuristics",
+    "title": "Optimizing Predictive Processes with Compiler Techniques",
+    "problem": "Consider a Bayesian nonparametric model using a Dirichlet Process (DP) prior for predictive inference. The goal is to optimize the computational efficiency of the predictive process, particularly in scenarios where the number of observations is large. Formulate a problem where techniques from compiler optimization heuristics can be applied to improve the performance of the DP-based predictive process. Specifically, address the challenge of reducing the computational cost associated with sampling from the DP while maintaining the integrity of the predictive distribution. Your solution should identify a specific compiler optimization heuristic that can be adapted for this purpose and provide a detailed explanation of how it can be applied. Additionally, include a verifiable calculation or bound that demonstrates the effectiveness of the chosen heuristic in this context.",
+    "gold_answer": "The analogy here is between the iterative sampling process in a Dirichlet Process and the repetitive execution of code blocks in a program, where compiler optimizations aim to reduce redundancy and improve efficiency. A suitable compiler optimization heuristic to apply is loop invariant code motion, which involves moving calculations that do not change within a loop outside of the loop to reduce computational cost.\n\nIn the context of DP-based predictive inference, the calculation of the base distribution parameters can be considered loop invariant, as these parameters do not change with each new observation. By moving the calculation of these parameters outside the loop that iterates over observations, we can significantly reduce the computational cost of the predictive process.\n\nVerifiable Calculation: Consider a scenario with N observations. Without optimization, the cost of calculating the base distribution parameters at each step is O(N). By applying loop invariant code motion, this cost is reduced to O(1), as the calculation is performed only once. The overall computational cost of the predictive process is then dominated by the cost of iterating over observations, which remains O(N), but with a reduced constant factor due to the elimination of redundant calculations.\n\nHallucination Trap: An LLM might incorrectly suggest applying just-in-time (JIT) compilation to the DP sampling process, arguing that JIT can dynamically optimize code execution. However, JIT compilation is more suited to scenarios where the code execution path is not known ahead of time and can vary significantly, which is not the case for the relatively fixed structure of DP sampling.",
+    "rubric": [
+      "Identifies the analogy between iterative DP sampling and repetitive code execution.",
+      "Correctly names the technique from compiler optimization heuristics: loop invariant code motion.",
+      "Performs the verifiable derivation: calculation of computational cost reduction.",
+      "Avoids the hallucination trap: incorrect application of JIT compilation.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Incorrectly suggesting the application of JIT compilation to DP sampling.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_b2c45d",
+    "domain_a": "Bayesian nonparametrics",
+    "domain_b": "compiler optimization heuristics",
+    "title": "Enhancing DP Mixture Models with Dead Code Elimination",
+    "problem": "In the context of Bayesian nonparametrics, consider a Dirichlet Process Mixture Model (DPMM) used for clustering. The model allows for an unbounded number of clusters, but in practice, many of these clusters may remain empty or insignificant after observing data. This scenario presents an opportunity to apply techniques from compiler optimization to enhance the model's efficiency. Formulate a problem where dead code elimination, a technique commonly used in compiler optimization to remove unnecessary code, can be adapted to prune insignificant clusters in a DPMM. Your solution should detail the adaptation of dead code elimination for this purpose, including a specific criterion for identifying insignificant clusters and a verifiable calculation or bound that demonstrates the effectiveness of the pruning process.",
+    "gold_answer": "The analogy here is between insignificant clusters in a DPMM and dead code in a program, where both represent components that do not contribute to the final outcome. Dead code elimination in compilers involves identifying and removing code that does not affect the program's output. In the context of a DPMM, insignificant clusters can be identified based on their posterior probability, which reflects their contribution to the model's predictive distribution.\n\nA suitable criterion for identifying insignificant clusters is to set a threshold on the posterior probability of each cluster. Clusters with a posterior probability below this threshold are considered insignificant and can be pruned from the model. This process is analogous to dead code elimination, where code with no effect on the program's output is removed.\n\nVerifiable Calculation: Consider a DPMM with K clusters. The computational cost of updating the model parameters is proportional to K. By pruning insignificant clusters, the effective number of clusters K' is reduced, leading to a reduction in computational cost. If the threshold for pruning is set appropriately, the reduction in K can be significant, leading to a proportional decrease in computational cost.\n\nHallucination Trap: An LLM might incorrectly suggest applying constant folding to the DPMM, arguing that constant folding can simplify expressions and reduce computational cost. However, constant folding is more suited to scenarios where expressions involve constants that can be precomputed, which is not directly applicable to the dynamic nature of cluster assignments in a DPMM.",
+    "rubric": [
+      "Identifies the analogy between insignificant clusters and dead code.",
+      "Correctly names the technique from compiler optimization heuristics: dead code elimination.",
+      "Performs the verifiable derivation: calculation of computational cost reduction through cluster pruning.",
+      "Avoids the hallucination trap: incorrect application of constant folding.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Incorrectly suggesting the application of constant folding to DPMM.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "fv_hse01",
+    "domain_a": "formal verification",
+    "domain_b": "hardware speculative execution",
+    "title": "Verifying Speculative Execution in Pipelined Processors",
+    "problem": "Consider a pipelined processor design where instructions can be speculatively executed ahead of their actual execution point. This speculative execution can improve performance but introduces complex verification challenges. Your task is to develop a formal verification technique that ensures the speculative execution does not lead to incorrect final states in the processor. Specifically, you need to create a method that checks if the speculative execution paths converge to the correct final state when the speculation is confirmed or rolled back. The verification must account for potential hazards such as data dependencies and branch mispredictions. You may use techniques from formal verification to create a model that can be analyzed for correctness.",
+    "gold_answer": "To verify speculative execution in pipelined processors, we draw an analogy between the states in formal verification models and the pipeline stages in hardware execution. We use model checking, a technique from formal verification, to analyze the state space of the processor. The key analogy is between the states in a Kripke structure (used in model checking) and the pipeline stages. Each stage can be in multiple speculative states depending on the branch predictions and data dependencies.\n\nWe construct a Kripke structure where each state represents a combination of pipeline stages and speculative states. Transitions between states are defined by the processor's micro-operations and the outcomes of speculative executions. We then use the CTL (Computation Tree Logic) formula AG(EF(correct_final_state)) to check that from any state, there exists a path to a correct final state.\n\nA likely hallucination is the claim that simple simulation-based testing can replace formal verification. This is incorrect because simulation cannot explore all possible execution paths exhaustively, especially in the presence of speculative execution and complex dependencies.",
+    "rubric": [
+      "Identifies the analogy between pipeline stages and states in a Kripke structure.",
+      "Correctly names the technique from formal verification: model checking.",
+      "Performs the verifiable derivation: constructs a Kripke structure and applies the CTL formula.",
+      "Avoids the hallucination trap: simulation-based testing cannot replace formal verification.",
+      "Discusses limitations or scope of the analogy: the model may become infeasibly large for very complex processors."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Claiming that simulation-based testing can replace formal verification for speculative execution.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "fv_hse02",
+    "domain_a": "formal verification",
+    "domain_b": "hardware speculative execution",
+    "title": "Ensuring Memory Consistency in Speculative Multi-core Processors",
+    "problem": "In a multi-core processor with speculative execution, ensuring memory consistency across cores is critical. Your task is to develop a formal verification approach that guarantees memory consistency despite speculative execution. Specifically, you need to verify that all cores eventually reach a consistent memory state after speculative execution, even in the presence of out-of-order execution and memory barriers. You may use techniques from formal verification to model the interactions between cores and memory, and to check for consistency properties.",
+    "gold_answer": "To ensure memory consistency in speculative multi-core processors, we use an analogy between the communication protocols in distributed systems (domain of formal verification) and the memory coherence protocols in multi-core processors (domain of hardware speculative execution). We employ the technique of invariant generation, commonly used in formal verification, to create invariants that must hold for memory consistency.\n\nWe model the multi-core system using a distributed shared memory model where each core has a local cache and a shared memory. We define invariants such as \"all cores must agree on the value of a memory location after a memory barrier\" and \"speculative writes must be rolled back if a memory barrier is violated.\" We then use invariant generation algorithms to automatically derive these invariants from the system's operational semantics.\n\nA likely hallucination is the claim that standard memory coherence protocols (like MESI) inherently ensure consistency in speculative execution without additional verification. This is incorrect because speculative execution can introduce non-standard execution paths that violate standard coherence protocols.",
+    "rubric": [
+      "Identifies the analogy between distributed shared memory models and multi-core memory coherence protocols.",
+      "Correctly names the technique from formal verification: invariant generation.",
+      "Performs the verifiable derivation: defines and generates invariants for memory consistency.",
+      "Avoids the hallucination trap: standard memory coherence protocols do not inherently ensure consistency in speculative execution.",
+      "Discusses limitations or scope of the analogy: the model may not capture all edge cases of speculative execution."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Claiming that standard memory coherence protocols inherently ensure consistency in speculative execution.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_otda01",
+    "domain_a": "optimal transport",
+    "domain_b": "domain adaptation",
+    "title": "Optimal Transport for Domain Adaptation in Feature Space",
+    "problem": "Consider a scenario where we have two datasets from different domains: a source domain with data points \\( \\{x_i^s\\}_{i=1}^{n_s} \\) and a target domain with data points \\( \\{x_j^t\\}_{j=1}^{n_t} \\). We aim to adapt a model trained on the source domain to perform well on the target domain. Using the framework of optimal transport, propose a method to align the feature distributions of the two domains. Specifically, describe how to use the Wasserstein distance to measure the discrepancy between the feature distributions and how to minimize this distance to achieve domain adaptation. Provide a concrete construction for the transport plan and discuss any potential limitations of this approach.",
+    "gold_answer": "To align the feature distributions of the source and target domains using optimal transport, we can leverage the Wasserstein distance, which provides a metric for comparing probability distributions. The Wasserstein distance between the source and target feature distributions can be defined as:\n\n\\[ W(P_s, P_t) = \\inf_{\\gamma \\in \\Pi(P_s, P_t)} \\mathbb{E}_{(x_s, x_t) \\sim \\gamma} \\| x_s - x_t \\|_2, \\]\n\nwhere \\( P_s \\) and \\( P_t \\) are the empirical distributions of the source and target features, and \\( \\Pi(P_s, P_t) \\) is the set of all joint distributions with marginals \\( P_s \\) and \\( P_t \\).\n\nTo minimize this distance, we can use the Sinkhorn algorithm to compute the optimal transport plan \\( \\gamma \\). The Sinkhorn algorithm iteratively scales the cost matrix to find an approximate solution to the optimal transport problem.\n\nThe transport plan \\( \\gamma \\) can be constructed as follows:\n\n1. Compute the cost matrix \\( C \\) where \\( C_{ij} = \\| x_i^s - x_j^t \\|_2^2 \\).\n2. Apply the Sinkhorn algorithm to obtain the transport plan \\( \\gamma \\).\n3. Use \\( \\gamma \\) to reweight the source features to match the target distribution.\n\nA verifiable calculation involves running the Sinkhorn algorithm and checking the resulting transport plan for validity (e.g., ensuring the marginals match \\( P_s \\) and \\( P_t \\)).\n\nThe most likely hallucination an LLM would emit is suggesting the use of a simple Euclidean distance instead of the Wasserstein distance, which does not capture the distributional shift effectively.\n\nLimitations include the computational cost of the Sinkhorn algorithm for large datasets and the assumption that the feature spaces are comparable, which may not hold in practice.",
+    "rubric": [
+      "Identifies the analogy between feature distribution alignment and optimal transport.",
+      "Correctly names the technique from domain adaptation: Sinkhorn algorithm for optimal transport.",
+      "Performs the verifiable derivation: Computes the cost matrix and applies the Sinkhorn algorithm.",
+      "Avoids the hallucination trap: Does not use simple Euclidean distance.",
+      "Discusses limitations or scope of the analogy."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Suggesting the use of simple Euclidean distance instead of the Wasserstein distance.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_grnns",
+    "domain_a": "representation theory of finite groups",
+    "domain_b": "neural architecture symmetry",
+    "title": "Group-Equivariant Neural Networks and Irreducible Representations",
+    "problem": "Consider a finite group G acting on a set X. We want to design a neural network that is equivariant to the action of G. Specifically, if f is our network and g is an element of G, we want f(gx) = g(f(x)) for all x in X. We know that any representation of G can be decomposed into irreducible representations (irreps). How can we use the concept of irreps from representation theory to construct a group-equivariant neural network? Provide a specific construction and discuss the limitations of this approach.",
+    "gold_answer": "To construct a group-equivariant neural network, we can use the concept of irreducible representations (irreps) from representation theory. Each irrep corresponds to a distinct way the group elements can act on a vector space. We can design our network to transform inputs according to these irreps. Specifically, we can decompose the input space into a direct sum of irreps and apply linear transformations that respect this decomposition. The key technique from neural architecture symmetry is the use of group convolutions, where the convolution operation is modified to respect the group action.\n\nA verifiable construction involves choosing a specific group G, such as the cyclic group C_n, and decomposing the input space into its irreps. For C_n, the irreps are one-dimensional and correspond to the nth roots of unity. We can then design a neural network layer that applies a different linear transformation to each irrep component of the input.\n\nThe most likely hallucination an LLM would emit is to claim that any standard convolutional neural network (CNN) is inherently group-equivariant, which is incorrect without modification to respect the group action. The correct approach requires a specific modification of the convolution operation to be equivariant to the group G.",
+    "rubric": [
+      "Identifies the analogy between group actions and neural network transformations.",
+      "Correctly names the technique from neural architecture symmetry: group convolutions.",
+      "Performs the verifiable derivation: decomposition of input space into irreps for a specific group.",
+      "Avoids the hallucination trap: incorrect claim that standard CNNs are group-equivariant.",
+      "Discusses limitations or scope of the analogy: complexity of handling large groups and high-dimensional irreps."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Claiming that standard convolutional neural networks are inherently group-equivariant without modification.",
+    "estimated_baseline_accuracy": 30
+  },
+  {
+    "id": "pg_symmtr",
+    "domain_a": "representation theory of finite groups",
+    "domain_b": "neural architecture symmetry",
+    "title": "Symmetry-Preserving Neural Network Training",
+    "problem": "In representation theory, a character of a group representation is a function that encodes the trace of the representation matrix for each group element. Characters are class functions, meaning they are constant on conjugacy classes of the group. In neural network training, we often seek to preserve certain symmetries to improve generalization. How can we use the concept of characters from representation theory to design a symmetry-preserving training objective for a neural network? Provide a specific objective function and discuss its properties.",
+    "gold_answer": "To design a symmetry-preserving training objective for a neural network, we can use the concept of characters from representation theory. The character of a representation provides a way to measure the 'average' effect of group elements on the representation space. We can incorporate this into our training objective by penalizing deviations from the expected character values. Specifically, we can define an objective function that includes a term for the difference between the character of the current network weights and the character of the target representation.\n\nA verifiable objective function involves choosing a specific group G and a target representation, then calculating the character values for both. The training objective can be formulated as minimizing the sum of the standard loss function and a symmetry-preserving term that penalizes deviations from the target character values.\n\nThe most likely hallucination an LLM would emit is to claim that simply adding group-invariant features to the network input is sufficient for symmetry preservation, which is incorrect without a specific objective function that enforces character constraints.",
+    "rubric": [
+      "Identifies the analogy between characters of group representations and symmetry-preserving training objectives.",
+      "Correctly names the technique from neural architecture symmetry: character-based objective function.",
+      "Performs the verifiable derivation: calculation of character values for a specific group and representation.",
+      "Avoids the hallucination trap: incorrect claim that group-invariant features alone ensure symmetry preservation.",
+      "Discusses limitations or scope of the analogy: computational cost of character calculations for large groups."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Claiming that adding group-invariant features to the network input is sufficient for symmetry preservation without a specific objective function.",
+    "estimated_baseline_accuracy": 25
+  },
+  {
+    "id": "pg_grpcls",
+    "domain_a": "representation theory of finite groups",
+    "domain_b": "neural architecture symmetry",
+    "title": "Group-Invariant Clustering with Neural Networks",
+    "problem": "In representation theory, the concept of conjugacy classes is crucial for understanding the structure of a group. Conjugacy classes partition the group elements into sets where each set contains elements that are similar in a group-theoretic sense. In machine learning, clustering is a common task where we want to partition data into groups based on similarity. How can we use the concept of conjugacy classes from representation theory to design a group-invariant clustering algorithm using neural networks? Provide a specific algorithm and discuss its properties.",
+    "gold_answer": "To design a group-invariant clustering algorithm using neural networks, we can use the concept of conjugacy classes from representation theory. Conjugacy classes provide a natural way to define similarity between group elements, which can be extended to data points transformed by group actions. We can design a neural network that learns to map data points to a latent space where points in the same conjugacy class are close together.\n\nA verifiable algorithm involves choosing a specific group G and defining a loss function that encourages points in the same conjugacy class to have similar representations in the latent space. The neural network can be trained using this loss function, and the resulting latent space can be used for clustering.\n\nThe most likely hallucination an LLM would emit is to claim that any standard clustering algorithm (e.g., k-means) is inherently group-invariant, which is incorrect without modification to respect the group action. The correct approach requires a specific modification of the clustering algorithm to be invariant to the group G.",
+    "rubric": [
+      "Identifies the analogy between conjugacy classes and group-invariant clustering.",
+      "Correctly names the technique from neural architecture symmetry: group-invariant latent space mapping.",
+      "Performs the verifiable derivation: definition of a loss function that respects conjugacy classes for a specific group.",
+      "Avoids the hallucination trap: incorrect claim that standard clustering algorithms are inherently group-invariant.",
+      "Discusses limitations or scope of the analogy: difficulty in defining appropriate loss functions for complex groups."
+    ],
+    "max_score": 5,
+    "hallucination_trap": "Claiming that standard clustering algorithms are inherently group-invariant without modification.",
+    "estimated_baseline_accuracy": 35
+  }
+]

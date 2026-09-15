@@ -1,0 +1,44 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+[project]
+name = "agentstorming-server"
+version = "0.1.0"
+description = "Agent Storming reference server"
+requires-python = ">=3.11"
+license = "MIT-0"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "asyncpg>=0.29.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.4",
+    "cryptography>=43",
+    "aiofiles>=24",
+    "PyYAML>=6",
+    "boto3>=1.34",
+    "python-multipart>=0.0.9",
+    "sse-starlette>=2.1",
+]
+
+[project.optional-dependencies]
+otel = [
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-http>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+]
+
+[project.scripts]
+agentstorming-server = "agentstorming_server.main:main"
+agentstorming-admin = "agentstorming_server.admin_cli.main:main"
+
+[tool.setuptools.packages.find]
+include = ["agentstorming_server*"]
+
+[tool.setuptools.package-data]
+"agentstorming_server" = ["schema/*.sql"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,115 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Agent Storming native agents — local deployment (docker-compose)
+#
+# One container per persona. Profiles let you bring up subsets:
+#
+#   docker compose --profile smoke up               # single scripted agent
+#   docker compose --profile neural-experiments up  # full 6-persona research sample
+#
+# The build context is the REPO ROOT (two directories up) so that the
+# Dockerfile can COPY both packages/client-py and packages/native-agent.
+#
+# Before running, invite tokens for each persona must be available as
+# env vars. The quickstart script at scripts/quickstart-local.sh handles
+# server-up → create-room → mint-invites → agents-up in one go.
+
+x-agent: &agent_common
+  build:
+    context: ../../../..          # monorepo root
+    dockerfile: packages/native-agent/Dockerfile
+  environment:
+    AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
+    CLAUDE_CODE_USE_BEDROCK: "1"
+    AWS_REGION: ${AWS_REGION:-us-east-1}
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  restart: on-failure
+  # Host-network on Linux simplifies talking to localhost:8440. On
+  # macOS docker compose rewrites this to host.docker.internal for you.
+  network_mode: host
+
+services:
+  smoke-agent:
+    <<: *agent_common
+    profiles: [smoke]
+    environment:
+      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
+      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_SMOKE:-}
+    volumes:
+      - ../../samples/single-persona:/persona:ro
+      - smoke_vault:/var/lib/agentstorming
+
+  # Neural-experiments sample — the six-persona research room.
+  project-lead:
+    <<: *agent_common
+    profiles: [neural-experiments]
+    environment:
+      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
+      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_PROJECT_LEAD:-}
+    volumes:
+      - ../../samples/neural-experiments/personas/project-lead:/persona:ro
+      - pl_vault:/var/lib/agentstorming
+
+  mathematician:
+    <<: *agent_common
+    profiles: [neural-experiments]
+    environment:
+      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
+      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_MATHEMATICIAN:-}
+    volumes:
+      - ../../samples/neural-experiments/personas/mathematician:/persona:ro
+      - math_vault:/var/lib/agentstorming
+
+  deep-learning-scientist:
+    <<: *agent_common
+    profiles: [neural-experiments]
+    environment:
+      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
+      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_DLS:-}
+    volumes:
+      - ../../samples/neural-experiments/personas/deep-learning-scientist:/persona:ro
+      - dls_vault:/var/lib/agentstorming
+
+  physics-scientist:
+    <<: *agent_common
+    profiles: [neural-experiments]
+    environment:
+      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
+      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_PHYS:-}
+    volumes:
+      - ../../samples/neural-experiments/personas/physics-scientist:/persona:ro
+      - phys_vault:/var/lib/agentstorming
+
+  fourier-transform-scientist:
+    <<: *agent_common
+    profiles: [neural-experiments]
+    environment:
+      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
+      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_FOURIER:-}
+    volumes:
+      - ../../samples/neural-experiments/personas/fourier-transform-scientist:/persona:ro
+      - fourier_vault:/var/lib/agentstorming
+
+  neuron-biologist:
+    <<: *agent_common
+    profiles: [neural-experiments]
+    environment:
+      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
+      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_NEURO:-}
+    volumes:
+      - ../../samples/neural-experiments/personas/neuron-biologist:/persona:ro
+      - neuro_vault:/var/lib/agentstorming
+
+volumes:
+  smoke_vault: {}
+  pl_vault: {}
+  math_vault: {}
+  dls_vault: {}
+  phys_vault: {}
+  fourier_vault: {}
+  neuro_vault: {}

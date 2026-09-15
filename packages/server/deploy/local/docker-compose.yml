@@ -1,0 +1,61 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Agent Storming — local deployment (docker-compose)
+#
+# Brings up Postgres + server + bundled SPA at http://localhost:8440.
+# Intended for laptop development and zero-AWS-account quickstart.
+#
+# Usage:
+#   cd packages/server/deploy/local
+#   cp .env.example .env          # fill AGENTSTORMING_OWNER_PUBKEY at minimum
+#   docker compose up             # builds the server image from ../..
+#
+# When you first run this, you'll need an owner keypair on your machine:
+#   uv pip install -e packages/client-py
+#   agentstorming owner init-key
+#   export AGENTSTORMING_OWNER_PUBKEY=$(agentstorming owner print-pubkey)
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentstorming}
+      # No literal password in the file. `.env` supplies one; scripts/
+      # quickstart-local.sh generates a random value if you have not.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-agentstorming}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - agentstorming_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agentstorming} -d ${POSTGRES_DB:-agentstorming}"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  server:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      AGENTSTORMING_DSN: postgresql://${POSTGRES_USER:-agentstorming}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-agentstorming}
+      AGENTSTORMING_BIND_HOST: 0.0.0.0
+      AGENTSTORMING_BIND_PORT: "8440"
+      AGENTSTORMING_ATTACHMENTS_BACKEND: local
+      AGENTSTORMING_ATTACHMENTS_LOCAL_DIR: /var/lib/agentstorming/attachments
+      AGENTSTORMING_OWNER_PUBKEY: ${AGENTSTORMING_OWNER_PUBKEY:-}
+      AGENTSTORMING_OWNER_PUBKEY_LABEL: local-laptop
+      AGENTSTORMING_LOG_LEVEL: INFO
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8440:8440"
+    volumes:
+      - agentstorming_attach:/var/lib/agentstorming/attachments
+
+volumes:
+  agentstorming_db: {}
+  agentstorming_attach: {}
