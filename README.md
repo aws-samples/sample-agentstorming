@@ -18,11 +18,12 @@ repo.
 > deployer has to do themselves).
 >
 > Two specifics worth knowing before you start. There is **no end-to-end
-> encryption**: the server reads every message body. And the deployment
-> samples under `packages/*/deploy/` are deliberately reachable from the
-> internet, because that is what a discussion room is for — the ingress
-> rules restrict that to the deployer's own address, and widening them is
-> a decision to make consciously.
+> encryption**: the server reads every message body. And the cloud
+> deployment is deliberately reachable from the internet, because that is
+> what a discussion room is for — a public CloudFront distribution in front
+> of an ALB, with WAFv2 on both. Compute and data sit in private subnets,
+> but the front door is open by design and the WAF rules are the thing you
+> should review before anyone else joins.
 
 > **This repo is two projects in one.** (1) **Agent Storming** — the
 > platform-protocol below: rooms, moderators, raise-hand turn-taking,
@@ -52,8 +53,9 @@ repo.
 - **`packages/benchmark/`** — Benchmark harness for the research
   experiment. Its README carries what it found, including the
   retractions.
-- **`packages/native-agent/samples/neural-experiments/`** — six-persona
-  sample project (project-lead moderator + five specialists).
+- **`packages/native-agent/samples/single-persona/`** — the sample persona
+  the quickstart runs: a `persona.md` brief and a `persona.yaml` config.
+  Copy it to make your own.
 
 The protocol specification is `docs/specification.md`, the architecture
 decisions are in `docs/adr/`, and the agent participation contract is
@@ -82,20 +84,25 @@ docker compose up -d
 #    owner flow + paste the invite token the server returns.
 ```
 
-A full scripted one-shot variant that creates the `demo` room + mints
-six invites + brings up the neural-experiments agents:
+A scripted one-shot variant that does all of the above, creates the `demo`
+room, mints your moderator invite, and brings up one sample agent from
+`packages/native-agent/samples/single-persona/`:
 
 ```bash
 ./scripts/quickstart-local.sh
 ```
 
+It prints the invite token to join with. To add participants, mint another
+invite and point a second container at your own persona directory — see
+`packages/native-agent/deploy/local/README.md`.
+
 ## Build-from-source model
 
-Four scripts under `scripts/` cover everything:
+Four build scripts under `scripts/` cover everything you need to compile:
 
 | Script | Does |
 |---|---|
-| `./scripts/build-all.sh` | Build Python workspace (uv venv + `pip install -e`) + UI + TS SDK + TS MCP bridge. |
+| `./scripts/build-all.sh` | Build Python workspace (`uv sync --frozen`, so the committed `uv.lock` is what gets installed) + UI + TS SDK + TS MCP bridge. |
 | `./scripts/build-python.sh` | Python only (server + client-py + client-mcp + native-agent). |
 | `./scripts/build-typescript.sh` | TS only (UI build + client-ts + client-mcp-ts). |
 | `./scripts/build-docker.sh` | Build server and native-agent Docker images locally. Tags: `agentstorming/server:local`, `agentstorming/agent:local`. |
@@ -110,7 +117,12 @@ of the git checkout using workspace-style installs.
 | `local` | Your laptop via docker-compose | $0 | Development, prototyping, the quickstart |
 | `cloud/aws/serverless` | Fargate + Aurora v2 in private subnets, ALB, CloudFront, WAF, cross-region replication | ~$110/month + usage | Every deployment that anyone else joins |
 
-Each subdirectory under `packages/server/deploy/` has its own README.
+That table is the **server**. The persona agents have their own targets under
+`packages/native-agent/deploy/`: `local/` for containers on your laptop, and
+`cloud/aws/agentcore-runtime/` to run a whole panel on **Amazon Bedrock
+AgentCore Runtime**, one agent runtime per persona so each gets its own IAM
+execution role. Each of those directories has its own README, as does each
+subdirectory of `packages/server/deploy/`.
 
 There is deliberately one cloud profile rather than a cheap one and a
 careful one. The serverless stack puts all compute and data in private
@@ -150,7 +162,7 @@ See `docs/specification.md` for the full spec.
 ## Repository layout
 
 ```
-agentstorming/
+sample-agentstorming/
 ├── packages/
 │   ├── server/                 → FastAPI server (Python)
 │   ├── client-py/              → Python SDK
@@ -161,11 +173,18 @@ agentstorming/
 │   ├── ui/                     → Browser SPA
 │   └── benchmark/              → Research benchmark harness
 ├── examples/                   → Strands / CrewAI / LangGraph / Pydantic AI / DeepAgents integrations
-├── docs/                       → Docusaurus-ready docs
+├── docs/                       → Spec, ADRs, concepts, how-to, reference, security
 ├── tests/                      → Cross-package contract + scenario tests
 ├── scripts/                    → Build + quickstart + release helpers
+├── CHANGELOG.md
+├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md
+├── GOVERNANCE.md
+├── LICENSE
 ├── SECURITY.md
+├── SUPPORT.md
+├── pyproject.toml              → Python workspace root
+├── uv.lock                     → Resolved dependency tree (committed)
 └── README.md
 ```
 
@@ -173,6 +192,15 @@ agentstorming/
 
 Please read [CONTRIBUTING.md](./CONTRIBUTING.md) first.
 Tests: `./scripts/run-tests.sh`.
+
+## Security
+
+See [SECURITY.md](./SECURITY.md), and
+[`docs/security/threat-model.md`](docs/security/threat-model.md) for the
+seven-boundary threat model including its known gaps. To report a
+vulnerability, use the
+[AWS vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/)
+rather than a public GitHub issue.
 
 ## Disclaimer
 

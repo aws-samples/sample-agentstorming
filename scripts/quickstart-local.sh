@@ -4,24 +4,33 @@
 
 # scripts/quickstart-local.sh
 #
-# Laptop-one-shot: generate owner key, bring up server+postgres,
-# create the `demo` room, mint six invites for the neural-experiments
-# sample, then bring up the agent containers.
+# Laptop-one-shot: generate owner key, bring up server+postgres, create the
+# `demo` room, mint an invite, then bring up the sample agent container.
 #
-# Requires: docker (compose), python 3.11+, agentstorming-client (pip).
+# This brings up ONE agent, from packages/native-agent/samples/single-persona.
+# That is the sample this repository ships. The six-persona research room is an
+# internal overlay (docker-compose.neural-experiments.yml) whose personas are not
+# published, so driving it from here would fail on a missing bind mount -- which
+# is exactly what an earlier version of this script did.
+#
+# To add more participants, mint another invite and point a second container at
+# your own persona directory; see packages/native-agent/deploy/local/README.md.
+#
+# Requires: docker (compose), python 3.12+, and a built workspace
+# (./scripts/build-python.sh).
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-echo "[1/6] Generate owner key (if needed)"
+echo "[1/5] Generate owner key (if needed)"
 if ! python -m agentstorming owner print-pubkey >/dev/null 2>&1; then
   python -m agentstorming owner init-key
 fi
 OWNER_PUBKEY=$(python -m agentstorming owner print-pubkey)
 echo "     owner pubkey: ${OWNER_PUBKEY}"
 
-echo "[2/6] Bring up server + postgres"
+echo "[2/5] Bring up server + postgres"
 cd "${ROOT_DIR}/packages/server/deploy/local"
 # Reuse an existing local password so repeat runs keep the same volume;
 # otherwise generate one. The compose file has no default, on purpose.
@@ -37,7 +46,7 @@ EOF
 chmod 600 .env
 docker compose up -d --build
 
-echo "[3/6] Wait for /healthz"
+echo "[3/5] Wait for /healthz"
 for i in $(seq 1 30); do
   if curl -fsS http://localhost:8440/healthz >/dev/null 2>&1; then
     break
@@ -48,7 +57,7 @@ curl -fsS http://localhost:8440/healthz || { echo "server didn't come up"; exit 
 
 export AGENTSTORMING_DSN="postgresql://agentstorming:${PG_PASSWORD}@127.0.0.1:5433/agentstorming"
 
-echo "[4/6] Create the demo room"
+echo "[4/5] Create the demo room"
 cat > /tmp/room-demo.yaml <<'YAML'
 id: demo
 config:
@@ -61,19 +70,20 @@ agentstorming-admin create-room --config /tmp/room-demo.yaml > /tmp/room-invites
 }
 cat /tmp/room-invites.json 2>/dev/null || true
 
-echo "[5/6] Mint one invite per persona"
+echo "[5/5] Mint invites and bring up the sample agent"
 mint() { agentstorming-admin create-invite --room demo --kind "$1" --ttl 604800 | python -c 'import json,sys; print(json.load(sys.stdin)["invite_token"])'; }
-export AGENTSTORMING_INVITE_PROJECT_LEAD=$(mint moderator)
-export AGENTSTORMING_INVITE_MATHEMATICIAN=$(mint participant)
-export AGENTSTORMING_INVITE_DLS=$(mint participant)
-export AGENTSTORMING_INVITE_PHYS=$(mint participant)
-export AGENTSTORMING_INVITE_FOURIER=$(mint participant)
-export AGENTSTORMING_INVITE_NEURO=$(mint participant)
-echo "     6 invites minted."
 
-echo "[6/6] Bring up the six native-agent containers"
+# One for the agent container, one for you to join from the browser as moderator.
+export AGENTSTORMING_INVITE_SMOKE=$(mint participant)
+HUMAN_INVITE=$(mint moderator)
+
 cd "${ROOT_DIR}/packages/native-agent/deploy/local"
-docker compose --profile neural-experiments up -d --build
+docker compose --profile smoke up -d --build
+
 echo ""
-echo "Done. Open http://localhost:8440/ in your browser and paste one of"
-echo "the invite tokens above. Room ID is 'demo'."
+echo "Done. Open http://localhost:8440/ and join room 'demo' as moderator with:"
+echo ""
+echo "    ${HUMAN_INVITE}"
+echo ""
+echo "The sample agent is already in the room. Logs:"
+echo "    docker compose -f packages/native-agent/deploy/local/docker-compose.yml logs -f smoke-agent"

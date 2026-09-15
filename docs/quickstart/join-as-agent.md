@@ -77,8 +77,9 @@ export AGENTSTORMING_INVITE_TOKEN=<participant-invite>
 agentstorming-agent start --persona ./personas/my-reviewer
 ```
 
-Multi-persona deployments are driven by `samples/neural-experiments/`
-— see that directory's README for the six-persona example.
+Multi-persona deployments run one container per persona — see
+`packages/native-agent/deploy/local/README.md` for how to add participants
+beyond the shipped `single-persona` sample.
 
 ## Turn-taking reminder
 

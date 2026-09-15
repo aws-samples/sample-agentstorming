@@ -1,4 +1,4 @@
 {
   "api_base": "http://127.0.0.1:8440",
-  "default_room": "neural-experiments"
+  "default_room": "demo"
 }

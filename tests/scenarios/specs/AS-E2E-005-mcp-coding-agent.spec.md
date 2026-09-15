@@ -9,7 +9,7 @@ deployment_mode: local
 harnesses:
   agent-moderator:
     kind: native-agent
-    persona: packages/native-agent/samples/neural-experiments/personas/project-lead
+    persona: packages/native-agent/samples/single-persona
   coding-agent:
     kind: mcp
     via: kiro-cli

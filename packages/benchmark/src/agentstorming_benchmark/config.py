@@ -15,7 +15,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]          # agentstorming/benchmark/
-REPO_ROOT = ROOT.parents[1]                         # neural-experiments/
+REPO_ROOT = ROOT.parents[1]                         # repository root
 RESULTS_DIR = ROOT / "results"
 DATA_DIR = ROOT / "data"
 CONFIGS_DIR = ROOT / "configs"

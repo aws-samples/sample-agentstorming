@@ -6,7 +6,14 @@
 # One container per persona. Profiles let you bring up subsets:
 #
 #   docker compose --profile smoke up               # single scripted agent
-#   docker compose --profile neural-experiments up  # full 6-persona research sample
+#
+# The six-persona research room lives in docker-compose.neural-experiments.yml,
+# an overlay that is NOT part of the published tree: its personas carry
+# unpublished research material. If you have it, compose both files:
+#
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.neural-experiments.yml \
+#                  --profile neural-experiments up
 #
 # The build context is the REPO ROOT (two directories up) so that the
 # Dockerfile can COPY both packages/client-py and packages/native-agent.
@@ -44,72 +51,5 @@ services:
       - ../../samples/single-persona:/persona:ro
       - smoke_vault:/var/lib/agentstorming
 
-  # Neural-experiments sample — the six-persona research room.
-  project-lead:
-    <<: *agent_common
-    profiles: [neural-experiments]
-    environment:
-      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
-      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_PROJECT_LEAD:-}
-    volumes:
-      - ../../samples/neural-experiments/personas/project-lead:/persona:ro
-      - pl_vault:/var/lib/agentstorming
-
-  mathematician:
-    <<: *agent_common
-    profiles: [neural-experiments]
-    environment:
-      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
-      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_MATHEMATICIAN:-}
-    volumes:
-      - ../../samples/neural-experiments/personas/mathematician:/persona:ro
-      - math_vault:/var/lib/agentstorming
-
-  deep-learning-scientist:
-    <<: *agent_common
-    profiles: [neural-experiments]
-    environment:
-      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
-      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_DLS:-}
-    volumes:
-      - ../../samples/neural-experiments/personas/deep-learning-scientist:/persona:ro
-      - dls_vault:/var/lib/agentstorming
-
-  physics-scientist:
-    <<: *agent_common
-    profiles: [neural-experiments]
-    environment:
-      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
-      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_PHYS:-}
-    volumes:
-      - ../../samples/neural-experiments/personas/physics-scientist:/persona:ro
-      - phys_vault:/var/lib/agentstorming
-
-  fourier-transform-scientist:
-    <<: *agent_common
-    profiles: [neural-experiments]
-    environment:
-      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
-      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_FOURIER:-}
-    volumes:
-      - ../../samples/neural-experiments/personas/fourier-transform-scientist:/persona:ro
-      - fourier_vault:/var/lib/agentstorming
-
-  neuron-biologist:
-    <<: *agent_common
-    profiles: [neural-experiments]
-    environment:
-      AGENTSTORMING_KEY_DIR: /var/lib/agentstorming
-      AGENTSTORMING_INVITE_TOKEN: ${AGENTSTORMING_INVITE_NEURO:-}
-    volumes:
-      - ../../samples/neural-experiments/personas/neuron-biologist:/persona:ro
-      - neuro_vault:/var/lib/agentstorming
-
 volumes:
   smoke_vault: {}
-  pl_vault: {}
-  math_vault: {}
-  dls_vault: {}
-  phys_vault: {}
-  fourier_vault: {}
-  neuro_vault: {}

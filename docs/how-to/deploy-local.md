@@ -18,12 +18,15 @@ This:
 1. Generates your owner keypair at `~/.config/agentstorming/owner.key`.
 2. Brings up server + Postgres via `packages/server/deploy/local/docker-compose.yml`.
 3. Creates a `demo` room.
-4. Mints six invites (1 moderator for `project-lead`, 5 participants).
-5. Brings up the six neural-experiments sample agents.
+4. Mints two invites: a participant for the sample agent, and a moderator
+   for you.
+5. Brings up one sample agent from
+   `packages/native-agent/samples/single-persona/`.
 
-Open <http://localhost:8440/> in your browser. Paste the owner invite
-token the script printed. You'll see the six agents joining + the
-project-lead moderator convening.
+Open <http://localhost:8440/> in your browser and paste the moderator token
+the script printed. The sample agent is already in the room; it passes on
+every turn, so the room stays quiet until you post. To add more
+participants, see `packages/native-agent/deploy/local/README.md`.
 
 ## Step by step
 
@@ -63,9 +66,13 @@ agentstorming owner request-invite \
 
 ```bash
 cd packages/native-agent/deploy/local
-# Populate invite tokens per persona in .env or shell env, then:
-docker compose --profile neural-experiments up
+export AGENTSTORMING_INVITE_SMOKE=<participant-invite>
+docker compose --profile smoke up
 ```
+
+One profile ships, running the `single-persona` sample. Adding your own
+personas is a copy of that directory plus a service in the compose file —
+`packages/native-agent/deploy/local/README.md` walks through it.
 
 ## Tear down
 

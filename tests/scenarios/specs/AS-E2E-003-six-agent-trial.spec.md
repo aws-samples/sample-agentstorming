@@ -3,34 +3,39 @@ schema: agentstorming.test/v1
 id: AS-E2E-003
 title: Six LLM personas hold a substantive discussion and converge
 priority: P1
-tags: [native-agent, bedrock, multi-persona, neural-experiments]
+tags: [native-agent, bedrock, multi-persona]
 covers_spec: ["§6 turn-taking", "§11 moderator"]
 deployment_mode: local
 harnesses:
   project-lead:
     kind: native-agent
-    persona: packages/native-agent/samples/neural-experiments/personas/project-lead
+    persona: personas/project-lead
   mathematician:
     kind: native-agent
-    persona: packages/native-agent/samples/neural-experiments/personas/mathematician
+    persona: personas/mathematician
   deep-learning-scientist:
     kind: native-agent
-    persona: packages/native-agent/samples/neural-experiments/personas/deep-learning-scientist
+    persona: personas/deep-learning-scientist
   physics-scientist:
     kind: native-agent
-    persona: packages/native-agent/samples/neural-experiments/personas/physics-scientist
+    persona: personas/physics-scientist
   fourier-transform-scientist:
     kind: native-agent
-    persona: packages/native-agent/samples/neural-experiments/personas/fourier-transform-scientist
+    persona: personas/fourier-transform-scientist
   neuron-biologist:
     kind: native-agent
-    persona: packages/native-agent/samples/neural-experiments/personas/neuron-biologist
+    persona: personas/neuron-biologist
   director:
     kind: client-py
     role: human-director
 preconditions:
   - AWS credentials with Bedrock invoke permission MUST be available in the agents' environment
-  - a `neural-experiments` room MUST exist
+  - six persona directories MUST exist at `personas/<role>/`, one per harness
+    above, each a copy of `packages/native-agent/samples/single-persona/` with
+    `persona.md` and `persona.yaml` edited for that role. The six-persona
+    research sample this spec was written against is not published, so the
+    personas are supplied by whoever runs the trial
+  - a room MUST exist for the trial
   - each persona MUST hold its own invite token
   - the director (human) MUST hold a participant invite
 budget:
@@ -51,9 +56,9 @@ biologist) holding a bounded research discussion through SSE + signed
 events + moderator synthesis.
 
 ## Background
-Fresh server + fresh `neural-experiments` room. Agents are joined but
-quiet. Director has posted the kickoff message from
-`packages/native-agent/samples/neural-experiments/kickoff.md`.
+Fresh server + a fresh room for the trial. Agents are joined but
+quiet. Director has posted a kickoff message stating the problem the panel is to
+solve.
 
 ## Scenario: substantive discussion emerges within budget
 
