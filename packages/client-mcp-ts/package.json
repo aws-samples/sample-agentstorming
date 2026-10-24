@@ -27,7 +27,7 @@
     "@types/node": "^22.0.0"
   },
   "overrides": {
-    "fast-uri": "^4.1.4",
+    "fast-uri": "^4.2.3",
     "ip-address": "^10.7.0",
     "hono": "^4.13.7",
     "qs": "^6.16.0",
