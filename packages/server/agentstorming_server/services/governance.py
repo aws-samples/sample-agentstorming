@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import datetime, timedelta, timezone
+
+import asyncpg
 
 from ..domain.event import (
     TYPE_AFFILIATION_CHANGED,
@@ -47,6 +50,9 @@ class GovernanceTicker:
         build_system_event=None,
         publish_system_event=None,
         snapshot=None,
+        owner_nonces=None,
+        nonce_purge_interval_seconds: float = 60.0,
+        lock_id: int | None = None,
     ) -> None:
         self._db = db
         self.rooms = rooms
@@ -67,6 +73,14 @@ class GovernanceTicker:
         # room_id -> monotonic epoch seconds of last participant_disconnected
         # notice, keyed by pid too so we only emit once per grace crossing.
         self._disconnected_seen: dict[tuple[str, str], bool] = {}
+        self._owner_nonces = owner_nonces
+        self._nonce_purge_interval = nonce_purge_interval_seconds
+        self._last_nonce_purge: float | None = None
+        self._lock_conn: asyncpg.Connection | None = None
+        self._leader = False
+        # Every server sharing a database must use the same id; it is a
+        # parameter so tests sharing a database with a running server do not.
+        self._lock_id = self.LOCK_ID if lock_id is None else lock_id
 
     async def start(self) -> None:
         self._task = asyncio.create_task(self._run())
@@ -79,27 +93,108 @@ class GovernanceTicker:
                 await self._task
             except (asyncio.CancelledError, Exception):
                 pass
+        await self._resign()
+
+    #: Session-level advisory lock that elects the one replica that governs.
+    LOCK_ID = 778_000
 
     async def _run(self) -> None:
         while not self._stopping.is_set():
             try:
-                async with self._db.acquire() as conn:
-                    lock_id = 778_000
-                    got = await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock_id)
-                if got:
-                    try:
-                        await self._expire_grants()
-                        await self._expire_mutes()
-                        await self._check_moderator_presence()
-                        await self._expire_pens()
-                        await self._emit_snapshots()
-                        await self._detect_disconnects()
-                    finally:
-                        async with self._db.acquire() as conn:
-                            await conn.execute("SELECT pg_advisory_unlock($1)", lock_id)
+                if await self._lead():
+                    await self._tick()
             except Exception:
                 log.exception("governance tick error")
             await asyncio.sleep(self._tick_seconds)
+
+    async def _lead(self) -> bool:
+        """Whether this process is the governing replica, taking the role if free.
+
+        The lock is held on a dedicated connection, outside the pool, for as
+        long as this process lives, so it elects one ticker. Two earlier forms
+        did not. Taken on a pooled connection and returned at once, it was gone
+        before the tick began, because asyncpg resets a released connection
+        with pg_advisory_unlock_all(). Held for one tick at a time, it stopped
+        ticks overlapping but let every replica tick in turn, and the snapshot
+        and disconnect bookkeeping lives in each process, so every replica
+        published its own metadata_snapshot and participant_disconnected.
+        Leadership now moves only when the holder's session ends.
+        """
+        conn = self._lock_conn
+        try:
+            if conn is None or conn.is_closed():
+                conn = self._lock_conn = await self._connect_lock()
+                self._leader = False
+            if self._leader:
+                # Confirm the lock is still ours: a session the server dropped
+                # (after a network partition, say) has lost it.
+                if await asyncio.wait_for(conn.fetchval(
+                    "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' "
+                    "AND objid = $1 AND pid = pg_backend_pid() AND granted)", self._lock_id,
+                ), timeout=5):
+                    return True
+                self._leader = False
+            self._leader = bool(await asyncio.wait_for(
+                conn.fetchval("SELECT pg_try_advisory_lock($1)", self._lock_id), timeout=5))
+            return self._leader
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError, TimeoutError):
+            log.warning("governance lock connection failed; standing down", exc_info=True)
+            self._leader = False
+            if conn is not None:
+                conn.terminate()
+            self._lock_conn = None
+            return False
+
+    async def _connect_lock(self) -> asyncpg.Connection:
+        """A connection the server drops soon after its client vanishes.
+
+        The lock lives as long as this backend does. A leader that lost the
+        network without a FIN or RST reaching Postgres left an idle backend
+        holding the lock until the server's TCP keepalive reaped it, minutes
+        on Aurora defaults and hours on stock Postgres, and no replica could
+        govern meanwhile. idle_session_timeout (Postgres 14+) ends a session
+        that sends nothing for a few ticks; the keepalive settings bound it on
+        older servers too.
+        """
+        keepalive = {"tcp_keepalives_idle": "10", "tcp_keepalives_interval": "5",
+                     "tcp_keepalives_count": "3"}
+        idle_ms = str(int(max(30.0, 3 * self._tick_seconds) * 1000))
+        try:
+            return await asyncpg.connect(
+                self._db.dsn, timeout=10,
+                server_settings={**keepalive, "idle_session_timeout": idle_ms},
+            )
+        except asyncpg.PostgresError:
+            # Before Postgres 14 the setting does not exist.
+            return await asyncpg.connect(self._db.dsn, timeout=10, server_settings=keepalive)
+
+    async def _resign(self) -> None:
+        conn, self._lock_conn, self._leader = self._lock_conn, None, False
+        if conn is None or conn.is_closed():
+            return
+        try:
+            await asyncio.wait_for(conn.execute("SELECT pg_advisory_unlock_all()"), timeout=5)
+            await conn.close(timeout=5)
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError, TimeoutError):
+            conn.terminate()
+
+    async def _tick(self) -> None:
+        await self._expire_grants()
+        await self._expire_mutes()
+        await self._check_moderator_presence()
+        await self._expire_pens()
+        await self._emit_snapshots()
+        await self._detect_disconnects()
+        await self._purge_nonces()
+
+    async def _purge_nonces(self) -> None:
+        if self._owner_nonces is None:
+            return
+        now = time.monotonic()
+        if self._last_nonce_purge is not None and now - self._last_nonce_purge < self._nonce_purge_interval:
+            return
+        self._last_nonce_purge = now
+        await self._owner_nonces.purge_expired()
 
     # ----- grants
 

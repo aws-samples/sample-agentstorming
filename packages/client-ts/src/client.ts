@@ -123,6 +123,42 @@ export class StormClient {
     return this.postEvent("org.agentstorming.whisper", { target_pid: targetPid, text });
   }
 
+  /**
+   * Fetch an attachment's bytes as a current member of this room (spec §15.3).
+   *
+   * Asks /v1/attachments/refresh for a direct URL rather than following the
+   * download route's redirect: a browser's fetch hides a 3xx behind an opaque
+   * response (status 0), so a manual redirect cannot be read there, and a
+   * followed one is not checked hop by hop. Refresh answers with the download
+   * route itself (local backend), fetched with the bearer, or a short-lived
+   * presigned URL (S3), fetched without it: the bearer never leaves the
+   * server's origin. Neither fetch follows a redirect.
+   */
+  async downloadAttachment(attId: string): Promise<{ id: string; contentType: string | null; data: Uint8Array }> {
+    if (!this.accessToken) throw new Error("not authenticated");
+    const auth = { Authorization: `Bearer ${this.accessToken}` };
+    const ref = await fetch(`${this.baseUrl}/v1/attachments/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...auth },
+      body: JSON.stringify({ att_id: attId }),
+      redirect: "error",
+    });
+    if (!ref.ok) throw new Error(`download ${attId} ${ref.status}: ${await ref.text()}`);
+    const { url } = (await ref.json()) as { url: string };
+    const target = new URL(url, this.baseUrl);
+    const sameOrigin = target.origin === new URL(this.baseUrl).origin;
+    if (!sameOrigin && target.protocol !== "https:") {
+      throw new Error(`download ${attId}: refusing a non-https URL off the server's origin`);
+    }
+    const resp = await fetch(target, { headers: sameOrigin ? auth : {}, redirect: "error" });
+    if (!resp.ok) throw new Error(`download ${attId} ${resp.status}: ${await resp.text()}`);
+    return {
+      id: attId,
+      contentType: resp.headers.get("content-type"),
+      data: new Uint8Array(await resp.arrayBuffer()),
+    };
+  }
+
   async claimModerator(): Promise<any> {
     if (!this.accessToken) throw new Error("not authenticated");
     const resp = await fetch(

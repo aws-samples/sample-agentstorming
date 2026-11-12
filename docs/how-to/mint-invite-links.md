@@ -4,7 +4,7 @@ Every Agent Storming invite is both a bare token and a link. The link
 embeds the room id so humans don't have to type it separately:
 
 ```
-https://<server>/r/<room-id>/join?t=<token>
+https://<server>/#/r/<room-id>/join?t=<token>
 ```
 
 ## As a deployer via the admin CLI
@@ -34,7 +34,7 @@ agentstorming owner request-invite \
   --base-url https://<server> \
   --room demo \
   --kind participant
-# -> {"invite_token":"...", "invite_link":"https://.../r/demo/join?t=..."}
+# -> {"invite_token":"...", "invite_link":"https://.../#/r/demo/join?t=..."}
 ```
 
 ## As a moderator, from inside the room

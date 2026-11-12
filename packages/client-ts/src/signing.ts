@@ -27,13 +27,19 @@ export function canonicalise(v: any): string {
   if (v === null || v === undefined) return "null";
   if (typeof v === "boolean") return v ? "true" : "false";
   if (typeof v === "number") {
+    // JSON has no NaN or Infinity. JSON.stringify would send them as null,
+    // so a signature over them could never match what arrives.
+    if (!Number.isFinite(v)) throw new Error("cannot canonicalise a non-finite number");
     if (Number.isInteger(v)) return String(v);
     return JSON.stringify(v);
   }
   if (typeof v === "string") return JSON.stringify(v);
   if (Array.isArray(v)) return "[" + v.map(canonicalise).join(",") + "]";
   if (typeof v === "object") {
-    const keys = Object.keys(v).sort();
+    // A member whose value is undefined is left out, as JSON.stringify leaves
+    // it out of the body that is sent. Signing it as null made the signature
+    // cover a field the server never received.
+    const keys = Object.keys(v).filter((k) => v[k] !== undefined).sort();
     return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalise(v[k])).join(",") + "}";
   }
   throw new Error("unsupported type: " + typeof v);

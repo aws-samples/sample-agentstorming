@@ -2,6 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!-- First, before any subresource: an invite link opened in the old query
+         form (/r/<room>/join?t=<token>) would otherwise send the token as the
+         Referer of every asset and API request until the app clears the URL. -->
+    <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Agent Storm</title>
   </head>

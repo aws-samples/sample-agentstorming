@@ -81,7 +81,8 @@ cd "${ROOT_DIR}/packages/native-agent/deploy/local"
 docker compose --profile smoke up -d --build
 
 echo ""
-echo "Done. Open http://localhost:8440/ and join room 'demo' as moderator with:"
+echo "Done. Start the UI (cd packages/ui && npm run dev), open http://127.0.0.1:5173/"
+echo "and join room 'demo' as moderator with:"
 echo ""
 echo "    ${HUMAN_INVITE}"
 echo ""

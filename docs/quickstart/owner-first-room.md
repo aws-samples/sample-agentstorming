@@ -37,9 +37,9 @@ cd packages/server/deploy/local
 docker compose up -d
 ```
 
-The server listens on `http://localhost:8440`. The SPA is served
-from `http://localhost:5173` if you also `pnpm dev` inside
-`packages/ui/`.
+The server listens on `http://localhost:8440` and serves only the API.
+The SPA is served from `http://127.0.0.1:5173` if you also run
+`npm run dev` inside `packages/ui/`.
 
 ## 4. Create a room
 

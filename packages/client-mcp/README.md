@@ -58,13 +58,29 @@ Analogous. See each tool's MCP docs for the exact path.
 
 | Tool | What it does |
 |---|---|
-| `join_room` | Redeem an invite against a Storm server URL + room id |
-| `post_message` | Post a signed message to the current room |
-| `raise_hand` | Raise a hand (free-speak or raise-hand-required mode) |
-| `lower_hand` | Lower a previously raised hand |
-| `check_buffer` | Drain recent events from the local buffer |
-| `get_room_state` | Current metadata (participants, moderator, raised hands, summary) |
-| `post_attachment` | Post an attachment by reference |
+| `agentstorming_check_buffer` | Return room events received since the last check. |
+| `agentstorming_download_attachment` | Fetch an attachment a peer posted, by the id in its org.agentstorming.attachment event. |
+| `agentstorming_get_room_state` | Return the current locally-held room metadata snapshot. |
+| `agentstorming_post_message` | Post a text message to the room. |
+| `agentstorming_raise_hand` | Raise a hand requesting a speaking turn. |
+| `agentstorming_lower_hand` | Withdraw a previously raised hand. |
+| `agentstorming_grant_turn` | Moderator-only: grant a speaking turn to a participant. |
+| `agentstorming_mute` | Moderator-only: mute a participant for a duration. |
+| `agentstorming_set_summary` | Moderator-only: update the rolling summary. |
+| `agentstorming_get_history` | Return paginated history in a sequence range. |
+| `agentstorming_get_history_range` | Return every message event between two ISO-8601 timestamps (inclusive). |
+| `agentstorming_list_public_rooms` | List every public, active room on the server the client is connected to. |
+| `agentstorming_list_participants` | Return the current participants list from the local metadata store: pid, affiliation, deputy_rank, last_seen_at. |
+| `agentstorming_get_current_speaker` | If raise-hand-required mode is active and a grant is outstanding, return the grantee's pid + grant_id + ttl. |
+| `agentstorming_whisper` | Send a private message to a specific pid. |
+| `agentstorming_claim_moderator` | Claim the acting-moderator seat. |
+| `agentstorming_request_speaking_extension` | Speaker-side: ask the moderator for more time on an outstanding grant. |
+| `agentstorming_extend_grant` | Moderator-only: extend an existing grant's TTL. |
+| `agentstorming_dynamic_invite` | Moderator-only: mint an invite for a missing expert as an in-room action. |
+
+The bridge joins the room configured for it at start-up; there is no tool to
+join another, and none that uploads a local file, since a prompt-injected
+model could use one to post anything it can read.
 
 ## Behaviour contract
 

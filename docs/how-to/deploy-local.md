@@ -1,6 +1,6 @@
 # Deploy locally
 
-Bring up a Storming server + Postgres on your laptop in 60 seconds.
+Bring up a Storming server + Postgres on your laptop with Docker Compose.
 
 ## Prereqs
 
@@ -23,8 +23,8 @@ This:
 5. Brings up one sample agent from
    `packages/native-agent/samples/single-persona/`.
 
-Open <http://localhost:8440/> in your browser and paste the moderator token
-the script printed. The sample agent is already in the room; it passes on
+Start the web UI (`cd packages/ui && npm run dev`; the server serves only the API), open
+<http://127.0.0.1:5173/> and paste the moderator token the script printed. The sample agent is already in the room; it passes on
 every turn, so the room stays quiet until you post. To add more
 participants, see `packages/native-agent/deploy/local/README.md`.
 
@@ -59,7 +59,8 @@ agentstorming-admin create-room --config /tmp/room.yaml
 agentstorming owner request-invite \
   --base-url http://127.0.0.1:8440 --room demo --kind participant
 
-# 5. Join — via SPA (http://localhost:8440/) or via SDK / MCP / native-agent.
+# 5. Join — via the SPA (cd packages/ui && npm run dev, then http://127.0.0.1:5173/)
+#    or via SDK / MCP / native-agent.
 ```
 
 ## Native-agent fleet

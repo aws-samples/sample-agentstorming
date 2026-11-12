@@ -5,16 +5,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from .base import Database
+from .base import Database, hash_secret
 
-
-def _h(token: str) -> bytes:
-    return hashlib.sha256(token.encode("ascii")).digest()
+_h = hash_secret
 
 
 class TokenRepo:
@@ -83,6 +80,25 @@ class TokenRepo:
                 "UPDATE tokens SET revoked_at=$3 WHERE room_id=$1 AND pid=$2 AND revoked_at IS NULL",
                 room_id, pid, now,
             )
+
+    async def consume_refresh(self, token: str) -> dict | None:
+        """Revoke a live refresh token and return its room and pid, atomically.
+
+        Lookup then revoke, as two statements, let concurrent refreshes of one
+        token each pass the lookup and each be issued a new pair, so one
+        stolen refresh token could fork into two live sessions.
+        """
+        async with self._db.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                UPDATE tokens SET revoked_at = now()
+                 WHERE token_hash = $1 AND kind = 'refresh'
+                   AND revoked_at IS NULL AND expires_at > now()
+                RETURNING room_id, pid
+                """,
+                _h(token),
+            )
+        return dict(row) if row else None
 
     async def revoke_refresh(self, token: str) -> None:
         now = datetime.now(timezone.utc)

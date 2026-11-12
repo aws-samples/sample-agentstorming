@@ -29,7 +29,9 @@ Borrowed loosely from XMPP MUC affiliations + Matrix power levels.
   keys, terminate rooms. Can also reclaim the moderator role any time.
 - `original-moderator`: grant/revoke turns, mute/eject/pen (within
   policy limits), appoint deputies, set the rolling summary, update
-  startup documents.
+  startup documents. Mute, eject, pen and deputy appointment reach only
+  participants with a lower power level, so never the `room-owner`: the
+  server answers 403 `org.agentstorming.err.outranked`.
 - `member`: post messages, raise hands, upload attachments.
 
 ## Frozen rooms

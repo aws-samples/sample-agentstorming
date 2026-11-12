@@ -7,6 +7,265 @@ conventions and uses calendar-based versioning during pre-1.0 (see
 
 ## [Unreleased]
 
+### Security
+
+- **Owner reads required no signature.** `GET /v1/owner/rooms`
+  listed every room, private ones included; `GET /v1/owner/rooms/{id}` returned a
+  room's full config and moderator; `GET /v1/owner/keys` listed the owner keys and
+  their labels. All three answered anyone. Reported by an external security
+  researcher. Every `/v1/owner/*` route now requires an owner signature,
+  enforced once by a dependency on each owner router rather than per handler.
+  Reads carry it in `X-AgentStorming-Owner-*` headers. See ADR-011.
+- **Anyone could starve the owner of nonces.** `GET /v1/owner/nonce` was
+  unsigned and rate-limited per client address; behind a load balancer every
+  caller shares the balancer's address, so about 30 anonymous requests a minute
+  blocked every owner operation, and each one added a row to a table nothing
+  purged. The nonce request is now signed over `{ts, op}` and limited per
+  verified owner key, and the governance ticker purges expired nonces.
+  **Breaking for owner clients**; the SDKs and CLI are updated.
+- **An owner signature now binds the method and path.** It previously covered the
+  body only, so endpoints with the same body shape accepted each other's
+  signatures: a signed request to vacate the moderator seat could terminate the
+  room instead. **Breaking for owner clients:** the signed payload now includes
+  `op`. The Python and TypeScript SDKs and the CLI are updated.
+- **`GET /v1/attachments/{id}` checked nothing.** It took an `Authorization` header
+  and never verified it, so an attachment ID alone downloaded the file from any
+  room, and an ejected member kept access. It now requires a bearer for a current
+  member of the owning room. **Breaking for attachment consumers:** use the
+  Python SDK's `download_attachment()` or the MCP tool
+  `agentstorming_download_attachment`, which send the bearer.
+- **On S3, attachment links outlived an ejection.** The upload response, and so
+  every attachment event, carried a presigned S3 URL valid for seven days. Every
+  URL handed out is now the authenticated download route; presigned URLs come
+  only from its redirect and from refresh, after the membership check, and
+  expire after `AGENTSTORMING_ATTACHMENTS_PRESIGN_TTL_SECONDS` (default 300).
+- **A room id containing `?` let one owner signature verify on two endpoints**,
+  because `op` joined the decoded path to the raw query. The path in `op` now
+  escapes `%` and `?`.
+- **Claiming with a junk invite revealed full private rooms**, answering
+  `room_full` with the capacity where a missing room answered `invite_invalid`.
+  The token is now checked, without being consumed, before anything about the
+  room. A valid invite presented at the wrong room's URL is no longer burned.
+- **Malformed owner requests answered 500 to anonymous callers**: a timestamp
+  without a UTC offset, a deeply nested body, NaN or Infinity in the body, an
+  invalid invite `kind`, or an out-of-range `ttl_seconds`. All are now 400 or
+  422. A non-ASCII invite token no longer causes a 500 on claim.
+- **API responses carry `Cache-Control: no-store`** unless a route sets its own,
+  so a shared cache placed in front cannot answer one caller with another's
+  owner read or room state. Attachment downloads send `private, no-store`.
+- **WAF logs redact `X-AgentStorming-Owner-Sig` and the query string**, so a
+  logged owner read cannot be replayed from the log group and a logged invite
+  link cannot be redeemed.
+- **Invite links carried the token in the query string**, which every CDN, WAF,
+  load-balancer and S3 access log records, including when a link is merely
+  previewed by a chat client. Links are now `/#/r/<room>/join?t=<token>`: the
+  token is in the fragment, which browsers never send. The UI accepts both.
+- **A moderator could mint a room-owner invite** through `dynamic-invite` and
+  so keep a room-owner identity after the owner vacated their seat. It now
+  mints participant invites only.
+- **An anonymous caller could obtain a nonce every owner route accepted**, from
+  the candidate registration route, which shared the nonce store. Nonces are
+  now scoped to the request type they were issued for.
+- **Replaying a used owner request emptied the owner's rate limit**: the limiter
+  ran before the nonce was checked. The nonce is now checked first. Signed
+  requests with a body must be `application/json` (415 otherwise) and keep
+  their nonce when refused for it.
+- **Attachment routes checked the bearer only after looking the id up**, so any
+  junk bearer could test which ids exist. The bearer is now verified first, and
+  an id from another room answers exactly like a missing one.
+- **The candidate credential route let anyone grow server memory and starve a
+  candidate.** It charged its rate limit first, on the raw pubkey string: a new
+  megabyte "pubkey" per request stayed in the limiter for the life of the
+  process, and junk bodies naming a pending candidate's key kept its signed poll
+  at 429. Fields are now bounded, the limiter runs after the signature and keys
+  on the decoded key, and the limiter drops refilled buckets once it is large.
+- **A captured owner nonce request could be replayed** for its five-minute
+  window, each replay spending the owner's issuance limit. Each signed request
+  is now accepted once, judged by the key and the signed bytes: a first version
+  judged by the `sig` string, and base64 decoding ignores surplus padding and
+  characters outside the alphabet, so `sig + "=="` passed as a new request.
+- **A failed OAuth2 refresh quoted the token endpoint to the agent.** The
+  broker's error carried the first 200 characters of the response body back over
+  the socket, and a token endpoint that echoes the request puts the refresh token
+  or client secret there, which the agent and its model must never see. The
+  error now carries the HTTP status and, when present, a standard RFC 6749 error
+  code only.
+- **The Python SDK logged room traffic.** An SSE event that failed to parse was
+  logged with its first 100 characters, which is message text or a whisper. The
+  log line now carries the event id, type and length only.
+- **`npm run dev` served the UI on every network interface.** The Vite config
+  bound `0.0.0.0`, so a laptop on shared Wi-Fi offered its dev server to the
+  network. It binds `127.0.0.1`; pass `--host` to choose otherwise.
+- **Any invite holder could take over a seated participant's session, the
+  moderator's included.** A claim carries no proof that the caller holds the
+  key, and a claim naming a key already seated in the room issued tokens for
+  that seat. With a spare participant invite and the moderator's public key,
+  which `participant_joined` broadcasts, a caller got the moderator's tokens,
+  and they worked on moderator routes. Such a claim is now refused
+  (`409 already_joined`), keeps the invite and issues nothing, including when
+  two claims for one key race: the insert decides, not an earlier read.
+- **The moderator could eject, pen, mute or demote the room owner.** Those
+  routes checked only that the caller held the seat, never the §6.3 rule that a
+  participant may act only on one with a lower power level. They now refuse
+  with `403 outranked`, and answer `404 unknown_participant` for a target with
+  no seat in the room.
+- **Every signed owner body refuses unknown fields**, not only room creation and
+  the PATCH: a `ttl` typed for `ttl_seconds` minted a week-long invite.
+- **A refresh token could fork into two sessions**: concurrent refreshes each
+  passed the lookup and each got a new pair. Rotation is now one atomic update.
+- **`/readyz` returned the database error text**, which names the host and user,
+  to unauthenticated callers, and returned it with HTTP 200, so the container
+  HEALTHCHECK polling the route never saw a failure. It now returns 503
+  `{"ok": false}` and logs the error server-side.
+- **Registration revealed private room names.** `POST /v1/rooms/{id}/register`
+  answered a private room with `403 room_private` and a missing one with `404`.
+  Both now return the same `404 room_unknown`.
+- A test now reads the server's whole route table: every route must be on an
+  explicit public list with its reason, or refuse an anonymous caller and visibly
+  authenticate. It fails on the pre-fix code.
+
+### Fixed
+
+- **Registering a key a participant had rotated to answered 500.** The rotated
+  row keeps its old pid, so the duplicate check missed it and the insert hit the
+  pubkey index. It is now `409 already_member`.
+
+- **Concurrent owner calls from the TypeScript SDK failed with 409.** Its
+  timestamps had millisecond resolution, so two nonce requests signed in the
+  same millisecond were byte-identical, and the server accepts each signed
+  nonce request once. Both SDKs now bump a timestamp that would repeat, and
+  follow the clock when it steps back more than a second, so a corrected clock
+  does not leave every owner call outside the ±5 minute window.
+- **The broker answered `internal` for an odd OAuth error body.** An
+  object-valued `"error": {...}` raised a `TypeError`, and a deeply nested body a
+  `RecursionError`, while the failure was being described; both are now reported
+  as a `provider_error`.
+- **The serverless README described TLS the stack does not have.** It called the
+  ALB certificate optional, drew an HTTP :80 listener and a CloudFront-to-ALB leg
+  that fell back to HTTP, and left both certificate variables out of every
+  `apply` and `destroy` command. The Terraform requires both certificates and has
+  no plaintext listener; the README, its diagram and `terraform.tfvars.example`
+  now say so and pass both variables.
+
+- **The local quickstart sent you to a page that does not exist.** The README,
+  three guides, the compose file and `quickstart-local.sh` said the server
+  serves the UI at `http://localhost:8440/`; it serves only the API, and `/` is a
+  404. They now say to run `npm run dev` in `packages/ui` and open
+  `http://127.0.0.1:5173/`.
+
+- **`PATCH /v1/owner/rooms/{id}` ignored the config fields the docs say it sets.**
+  A signed `{"raise_hand_required": true}` answered 200 and changed nothing. The
+  PATCH now sets every §5.2 field the owner may change, `mode` included (a change
+  emits `mode_promoted`, so brokers learn of a demotion at once), and refuses an
+  unknown field with 422. `attachments.enabled` is now enforced on upload.
+- **SSE went silent for good after the LISTEN connection dropped**, and `/readyz`
+  kept answering 200. The hub now probes the connection, reconnects, and wakes
+  every stream to re-read from its cursor; `/readyz` returns 503 while it is down.
+- **Every replica governed at once.** The ticker took its advisory lock on a
+  pooled connection and returned it straight away, and asyncpg's reset on
+  release runs `pg_advisory_unlock_all()`, so the lock was gone before the tick
+  began: replicas expired the same grants together and each published its own
+  metadata snapshots and disconnect notices. The lock is now held on a dedicated
+  connection for the life of the process and re-checked every tick, which
+  elects one governing replica; it moves only when that replica's session ends.
+- **A fresh replica answered the first `/stream` or `/sync` with 500**
+  ("room privkey not cached") until it had served a claim for that room, so
+  every restart and rolling deploy broke cursor-less joins. The room key is now
+  loaded on first use by every snapshot path.
+- **A dropped LISTEN connection could still hang the hub forever.** Closing a
+  connection whose peer had gone silent waited on the server indefinitely; a
+  connection that fails its probe is now terminated outright. ECS now replaces
+  a task whose `/readyz` fails, which nothing acted on before.
+- **Some anonymous requests still answered 500**: a non-ASCII bearer or refresh
+  token, a non-string refresh token, and on the candidate credential route a
+  timestamp without an offset or a body with no canonical form. All are 400 or
+  401 now, through one shared check for both signed surfaces.
+- **Claims burned valid invites.** A participant invite sent to
+  `claim_moderator`, or a moderator invite while the seat was held, consumed the
+  token before failing. Both are checked before the token is spent.
+- **Room creation ignored or mis-stored config.** `POST /v1/owner/rooms` took any
+  `config` dict: a misplaced `mode` was dropped, so the room came up `active`, and
+  a wrongly typed value answered 500. It now validates `config` like the PATCH.
+- **The persona's system prompt could include files outside its scratchpad**
+  through a planted symlink; `load_all_as_prompt` now applies the same
+  confinement as `read`.
+- **The broker shared one STS session across personas** and could not render
+  the documented session-name template. Sessions are cached per session name,
+  names are made valid for STS, and the broker adds the peer's verified uid,
+  which the agent cannot override.
+- **Two moderator invites redeemed at once could seat two moderators.**
+  Moderator claims for a room are now serialised, in one transaction on one
+  connection. (A first version held the lock on one pooled connection while the
+  claim used others, and forty concurrent claims stalled every request on the
+  server.)
+- **Malformed moderator bodies answered 500**: a string `ttl_seconds`, a
+  numeric `hand_id`, a duration past year 9999, a pid holding a NUL, a NUL in a
+  dynamic invite's `reason`. All are now `400 bad_body`.
+- **SSE and `/sync` could stall.** A stream more than one page behind got the
+  rest only when another event arrived, and an event committed between the
+  replay and the subscription waited the same way; the stream now subscribes
+  first, drains every page, and also checks at each keepalive. `/sync` advanced
+  its cursor only over events the caller could see, so a page of other people's
+  whispers held it in place forever.
+- **Inputs Postgres cannot store answered 500**: a NUL in a path or a body
+  field, and a lone surrogate in a constrained field, whose 422 FastAPI could not
+  encode. Both are 4xx now.
+- **The web UI could not post in a raise-hand-required room** even while holding
+  the floor: it sent no `grant_id`. It sends the active grant now. The UI also
+  sets `Referrer-Policy: no-referrer`, so an invite link opened in the old query
+  form is not sent as the Referer of every request; WAF logs redact Referer too.
+- **The governance leader could hold its lock long after vanishing**, minutes on
+  Aurora and hours on stock Postgres, with nobody governing meanwhile. Its
+  connection now sets `idle_session_timeout` and TCP keepalives (ADR-012).
+- **The broker's AWS sessions were refreshed on every AWS call.** botocore
+  refreshes credentials with under 15 minutes left, and the broker vended 15
+  minutes and returned the same session until a minute before expiry, so the
+  broker's own rate limit then failed real requests. Sessions now last 30
+  minutes by default (at least 20), are replaced once inside botocore's window,
+  are named from the labels the shim actually sends, are capped in number, and
+  are fetched off the event loop.
+- The ECS health check on `/readyz` is gone: it would have replaced every task
+  during a database restart, which the process recovers from by itself.
+- The TypeScript SDK downloads attachments through `/v1/attachments/refresh`
+  instead of following redirects, which a browser hides; Python SDK errors carry
+  the server's code and the HTTP status.
+- `db_connection` reaches an IPv6 loopback (`::1`), which it accepted but could
+  not connect to. Terraform before 1.12 can plan the stack again (a validation
+  relied on `||` short-circuiting), and an impaired zone no longer blocks every
+  plan. SSE streams drain a backlog longer than one page after a reconnect.
+- **Per-IP rate limits saw only the load balancer.** `AGENTSTORMING_FORWARDED_ALLOW_IPS`
+  is passed to uvicorn, and the serverless stack sets it to the VPC CIDR.
+- The TypeScript and browser canonicalisers signed an `undefined` member as
+  `null` although `JSON.stringify` leaves it out of the body, so the signature
+  covered a field that was never sent; they now leave it out, and refuse NaN
+  and Infinity.
+- **The serverless image could not be updated as documented.** The ECR
+  repository has immutable tags, but the task definition and the README used
+  `:latest`, which the repository refuses to overwrite, so the second push
+  failed. The stack now takes `server_image_tag` (refusing `latest`) and the
+  README tags each build with its commit. `deploy.py` for AgentCore likewise
+  refuses an unpinned or `:latest` `container_uri`.
+- **Declared dependency floors admitted versions with published advisories**
+  (body-parser, vite and the MCP SDK on npm; eleven Python requirements). The
+  locks were already patched; the floors now are too. Workspace packages pin
+  `agentstorming-client` exactly, since they ship and change together.
+- Two `# nosemgrep` comments shipped in a test fixture although the exceptions
+  document said there were none; they are gone and the export now refuses
+  `nosemgrep` as it refuses `checkov:skip`.
+
+### Added
+
+- `owner.list_rooms()`, `get_room()`, `list_keys()` (Python) and `listRooms()`,
+  `getRoom()`, `listKeys()` (TypeScript), with CLI commands
+  `agentstorming owner list-rooms | get-room | list-keys`.
+- `StormClient.download_attachment()` (Python), `downloadAttachment()`
+  (TypeScript), and the MCP tool `agentstorming_download_attachment` in both
+  bridges. Python SDK errors now carry the server's code (they were all
+  generic), uploads declare a content type, and attachment downloads follow a
+  redirect only to HTTPS or back to the server.
+- `AGENTSTORMING_ATTACHMENTS_PRESIGN_TTL_SECONDS` and
+  `AGENTSTORMING_FORWARDED_ALLOW_IPS`.
+
 ### Changed
 
 - **License: Apache-2.0 → MIT-0, and the destination is `aws-samples`.** The

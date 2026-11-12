@@ -8,7 +8,7 @@ description = "Auto-import shim that makes Python SDKs talk to the Storm credent
 requires-python = ">=3.11"
 license = "MIT-0"
 dependencies = [
-    "agentstorming-client>=0.1.0",
+    "agentstorming-client==0.1.0",
 ]
 
 [build-system]

@@ -7,4 +7,13 @@ rds_instance_class = "db.t4g.small"
 fargate_cpu        = 2048
 fargate_memory     = 4096
 desired_count      = 1
-admin_token        = ""
+
+# Required on every apply: the tag of the server image pushed to the stack's
+# ECR repository, such as the commit SHA. Not "latest"; the repository's tags
+# are immutable. See README.md, steps 3 to 5.
+# server_image_tag = "<commit-sha>"
+
+# Required as well: the stack has no HTTP fallback. The CloudFront certificate
+# must be in us-east-1; the ALB certificate in the stack's Region.
+# cloudfront_certificate_arn = "arn:aws:acm:us-east-1:<account-id>:certificate/<id>"
+# acm_certificate_arn        = "arn:aws:acm:<region>:<account-id>:certificate/<id>"

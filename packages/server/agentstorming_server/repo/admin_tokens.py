@@ -5,14 +5,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 
-from .base import Database
+from .base import Database, hash_secret
 
-
-def _h(token: str) -> bytes:
-    return hashlib.sha256(token.encode("ascii")).digest()
+_h = hash_secret
 
 
 class AdminTokenRepo:

@@ -28,6 +28,29 @@ from urllib.parse import urlparse
 
 from .base import Provider, ProviderResult, ProviderError
 
+#: RFC 6749 §5.2 error codes, the only part of a failed token response passed on.
+_OAUTH_ERROR_CODES = frozenset({
+    "invalid_request", "invalid_client", "invalid_grant",
+    "unauthorized_client", "unsupported_grant_type", "invalid_scope",
+})
+
+
+def _refresh_failure(r) -> str:
+    """Describe a failed refresh without quoting the token endpoint.
+
+    The message goes back to the agent. It used to carry the first 200
+    characters of the response body, and an endpoint that echoes the request
+    puts the refresh token or client secret there, which the agent must never
+    see. Only the status and a standard error code are passed on.
+    """
+    try:
+        code = r.json().get("error")
+    except (ValueError, AttributeError, RecursionError):  # not JSON, not an object, too deep
+        code = None
+    # Some providers send an object here; only a string can be a standard code.
+    suffix = f" ({code})" if isinstance(code, str) and code in _OAUTH_ERROR_CODES else ""
+    return f"refresh failed: HTTP {r.status_code}{suffix}"
+
 
 class OAuth2RefreshFlowProvider(Provider):
     name = "oauth2_refresh"
@@ -73,7 +96,7 @@ class OAuth2RefreshFlowProvider(Provider):
         with httpx.Client(timeout=30.0) as c:
             r = c.post(self.token_endpoint, data=data)
             if r.status_code != 200:
-                raise ProviderError(f"refresh failed {r.status_code}: {r.text[:200]}")
+                raise ProviderError(_refresh_failure(r))
             j = r.json()
         self._access_token = j["access_token"]
         expires_in = int(j.get("expires_in", 3600))

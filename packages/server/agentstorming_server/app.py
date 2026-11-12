@@ -5,12 +5,16 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import Settings
 from .repo.admin_tokens import AdminTokenRepo
@@ -212,15 +216,20 @@ async def _lifespan(app: FastAPI):
 
     app.state._sync_room_cache = {}
 
-    # Override snapshot.build_envelope to warm the cache.
-    original_build_envelope = app.state.snapshot.build_envelope
-    async def build_envelope(room_id: str, *, sign_func):
-        room = await app.state.rooms.get(room_id)
-        if room is None:
-            raise ValueError(f"unknown room {room_id}")
-        app.state._sync_room_cache[room_id] = room
-        return await original_build_envelope(room_id, sign_func=sign_func)
-    app.state.snapshot.build_envelope = build_envelope  # type: ignore[assignment]
+    # Warm the cache in build_raw_dict, which every snapshot path goes through
+    # (build_envelope calls it). Warming only in build_envelope, as this used
+    # to, left /stream and /sync, which call build_raw_dict directly, failing
+    # with "room privkey not cached" on any process that had not yet served a
+    # claim for the room: every fresh replica and every restart.
+    original_build_raw_dict = app.state.snapshot.build_raw_dict
+    async def build_raw_dict(room_id: str, *, sign_func):
+        if room_id not in app.state._sync_room_cache:
+            room = await app.state.rooms.get(room_id)
+            if room is None:
+                raise ValueError(f"unknown room {room_id}")
+            app.state._sync_room_cache[room_id] = room
+        return await original_build_raw_dict(room_id, sign_func=sign_func)
+    app.state.snapshot.build_raw_dict = build_raw_dict  # type: ignore[assignment]
     app.state.sys_sign = sys_sign
 
     app.state.post_event = PostEventService(
@@ -242,6 +251,7 @@ async def _lifespan(app: FastAPI):
         build_system_event=sys_build_event,
         publish_system_event=sys_publish_event,
         snapshot=app.state.snapshot,
+        owner_nonces=app.state.owner_nonces,
     )
     await app.state.governance.start()
 
@@ -251,6 +261,7 @@ async def _lifespan(app: FastAPI):
             raise RuntimeError("s3 backend requires attachments_s3_bucket + attachments_s3_region")
         app.state.attachments_store = S3AttachmentStorage(
             settings.attachments_s3_bucket, settings.attachments_s3_region,
+            presign_ttl_seconds=settings.attachments_presign_ttl_seconds,
         )
     else:
         app.state.attachments_store = LocalAttachmentStorage(
@@ -291,12 +302,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=not using_wildcard,
     )
 
+    # FastAPI's default handler echoes the offending input back with
+    # ensure_ascii=False, and a lone surrogate there (a valid JSON escape that
+    # pydantic refuses for a constrained string) cannot be encoded as UTF-8:
+    # the 422 became a 500. Same body, escaped to ASCII.
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(request, exc: RequestValidationError):
+        body = json.dumps({"detail": jsonable_encoder(exc.errors())}, ensure_ascii=True)
+        return Response(body, status_code=422, media_type="application/json")
+
     # Static security headers — applied to every response. These are
     # cheap defence-in-depth that only get in the way of a malicious
     # caller. HSTS is opt-in (operator must set the header explicitly
     # because not every deployment is HTTPS).
     @app.middleware("http")
     async def _security_headers(request, call_next):
+        # Postgres text cannot hold NUL, and a path parameter carrying one
+        # (/v1/rooms/%00/register, say) reached asyncpg and answered 500.
+        if "\x00" in request.scope["path"]:
+            return JSONResponse({"detail": {"code": "org.agentstorming.err.bad_path"}}, status_code=400)
         response = await call_next(request)
         if settings.hsts_header:
             response.headers.setdefault("Strict-Transport-Security",
@@ -310,6 +334,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.referrer_policy:
             response.headers.setdefault("Referrer-Policy",
                                         settings.referrer_policy)
+        # API responses are per-caller: owner reads, room state, attachments.
+        # Nothing set a Cache-Control on them, so a shared cache placed in front
+        # (the shipped CloudFront behaviour disables caching, a hand-built one
+        # might not) could answer one caller with another's response. A route
+        # that wants something else sets its own; setdefault keeps it.
+        path, root = request.scope["path"], request.scope.get("root_path") or ""
+        if root and path.startswith(root):
+            path = path[len(root):]
+        if path.startswith("/v1/"):
+            response.headers.setdefault("Cache-Control", "no-store")
         return response
 
     app.include_router(v1_stream.router, prefix="/v1/rooms")
@@ -323,6 +357,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(v1_documents.router, prefix="/v1/rooms")
     app.include_router(v1_capabilities.router, prefix="/v1")
     app.include_router(v1_attachments.router, prefix="/v1")
+    app.include_router(v1_owner.nonce_router, prefix="/v1")
     app.include_router(v1_owner.router, prefix="/v1")
     app.include_router(v1_discovery.router, prefix="/v1")
 
@@ -330,13 +365,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def healthz():
         return {"ok": True}
 
+    # Unauthenticated and published through CloudFront, so a failure says no
+    # more than "not ready". It used to return the database exception text,
+    # which names the host and user, and it returned it with HTTP 200, so the
+    # container HEALTHCHECK that polls this route never saw the failure.
+    #
+    # Ready means both connections the server depends on work: the pool, and
+    # the LISTEN connection that fans events out to SSE. The second used to go
+    # unchecked, so a dropped LISTEN connection left every stream silent while
+    # this route kept answering 200.
     @app.get("/readyz")
     async def readyz():
         try:
             async with app.state.db.acquire() as conn:
                 await conn.execute("SELECT 1")
-            return {"ok": True}
-        except Exception as e:  # pragma: no cover
-            return {"ok": False, "error": str(e)}
+        except Exception:
+            log.exception("readiness check failed")
+            return JSONResponse({"ok": False}, status_code=503)
+        if not app.state.pubsub.healthy:
+            log.warning("readiness check failed: the LISTEN connection is down")
+            return JSONResponse({"ok": False}, status_code=503)
+        return {"ok": True}
 
     return app

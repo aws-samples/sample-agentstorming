@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     # security group / listen address, not by guessing an interface here.
     bind_host: str = "0.0.0.0"  # nosec B104 - always fronted by nginx or an ALB
     bind_port: int = 8440
+    # Proxies trusted to set X-Forwarded-For, as a comma-separated list of IPs
+    # or CIDRs, handed to uvicorn as forwarded_allow_ips. The per-IP rate
+    # limits key on the client address, and behind a load balancer without
+    # this every caller has the balancer's address, so one client can spend
+    # everyone's allowance. Set it to the balancer's subnets (the serverless
+    # stack sets the VPC CIDR). Unset: uvicorn's default, which trusts only
+    # 127.0.0.1 or what FORWARDED_ALLOW_IPS says.
+    forwarded_allow_ips: str | None = None
 
     # --- CORS -----------------------------------------------------------
     # CSV list of permitted origins. Default "*" stays permissive for
@@ -130,6 +138,10 @@ class Settings(BaseSettings):
     attachments_s3_bucket: str | None = None
     attachments_s3_region: str | None = None
     attachments_max_bytes: int = 52_428_800  # 50 MiB
+    # Lifetime of the presigned S3 URL that GET /v1/attachments/{id} redirects
+    # to. It bounds how long an ejected member can keep using a URL obtained
+    # before the ejection, so keep it short. 1 to 604800 (S3's ceiling).
+    attachments_presign_ttl_seconds: int = 300
 
     # --- tokens ----------------------------------------------------------
     access_token_ttl_seconds: int = 900

@@ -34,6 +34,7 @@ the mechanism is verified without needing a live database in CI.
 
 from __future__ import annotations
 
+import ipaddress
 import socket
 from typing import Any
 
@@ -52,7 +53,12 @@ class DBConnectionBrokerProvider(Provider):
       username, password, password_env, password_file: credentials
         (held in the broker, never returned to the agent).
       database: database name (driver-specific).
-      tls: bool, default True for non-loopback hosts.
+      tls: not supported. The fd handed to the agent is a plain TCP socket,
+        and TLS state lives in the broker process, so it cannot survive the
+        hand-off. The provider therefore refuses a non-loopback host unless
+        ``tls: false`` explicitly accepts cleartext. For a remote database,
+        run a TLS proxy on loopback (stunnel, a cloud SQL proxy) and point
+        ``host`` at it.
 
     Limitations (documented for the operator):
       - Connection auth happens in the broker. Once handed off, the
@@ -74,8 +80,35 @@ class DBConnectionBrokerProvider(Provider):
             raise ProviderError(f"unknown driver: {self.driver}")
         self.host = config["host"]
         self.port = int(config["port"])
+        self._require_safe_transport(config.get("tls"))
         # Credentials are read but never exposed via any public method.
         self._credentials = self._load_credentials()
+
+    def _require_safe_transport(self, tls: Any) -> None:
+        # This docstring used to promise "tls: default True for non-loopback
+        # hosts" while open_connection() only ever made a plain connect, so an
+        # operator could believe a remote database link was encrypted when it
+        # was not. Refuse instead of pretending.
+        if tls is True:
+            raise ProviderError(
+                "db_connection does not support tls: the fd handed to the agent is a "
+                "plain TCP socket. Run a TLS proxy on loopback and point host at it."
+            )
+        if tls is False or self._is_loopback(self.host):
+            return
+        raise ProviderError(
+            f"db_connection would connect to {self.host!r} in cleartext. Point host at a "
+            "loopback TLS proxy, or set tls: false to accept cleartext explicitly."
+        )
+
+    @staticmethod
+    def _is_loopback(host: str) -> bool:
+        if host == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            return False
 
     def _load_credentials(self) -> dict[str, str]:
         import os
@@ -121,8 +154,12 @@ class DBConnectionBrokerProvider(Provider):
         socket; that work is left as a follow-up since each driver's
         wire protocol differs.
         """
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((self.host, self.port))
+        # create_connection picks the address family from the host, so ::1
+        # (accepted as loopback) and IPv6-only names work; an AF_INET socket
+        # could not reach them. Bounded connect, then a blocking socket, since
+        # the fd is handed to the agent as is.
+        s = socket.create_connection((self.host, self.port), timeout=10)
+        s.settimeout(None)
         # NB: real driver-aware versions would do the auth dance here.
         return s
 

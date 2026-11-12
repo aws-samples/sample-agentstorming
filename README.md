@@ -61,7 +61,7 @@ The protocol specification is `docs/specification.md`, the architecture
 decisions are in `docs/adr/`, and the agent participation contract is
 `docs/agent-contract/SKILL.md`.
 
-## 60-second local quickstart (laptop)
+## Local quickstart (laptop)
 
 ```bash
 # 1. Prereqs: Docker, Python 3.12, uv, Node 22 + npm.
@@ -80,8 +80,11 @@ cd packages/server/deploy/local
 cp .env.example .env       # paste AGENTSTORMING_OWNER_PUBKEY into .env
 docker compose up -d
 
-# 5. Open http://localhost:8440/ in a browser. Create a room via the
-#    owner flow + paste the invite token the server returns.
+# 5. In a second terminal, from the repository root, start the web UI.
+#    It is a separate Vite app; the server serves only the API.
+cd packages/ui && npm run dev
+#    Open http://127.0.0.1:5173/, create a room via the owner flow and
+#    paste the invite token the server returns.
 ```
 
 A scripted one-shot variant that does all of the above, creates the `demo`
@@ -115,7 +118,7 @@ of the git checkout using workspace-style installs.
 | Mode | Where | Cost (idle) | Use when |
 |---|---|---|---|
 | `local` | Your laptop via docker-compose | $0 | Development, prototyping, the quickstart |
-| `cloud/aws/serverless` | Fargate + Aurora v2 in private subnets, ALB, CloudFront, WAF, cross-region replication | ~$110/month + usage | Every deployment that anyone else joins |
+| `cloud/aws/serverless` | Fargate + Aurora v2 in private subnets, ALB, CloudFront, WAF, cross-region replication | From ~$44/month for the Aurora floor alone, plus the fixed charges below and usage | Every deployment that anyone else joins |
 
 That table is the **server**. The persona agents have their own targets under
 `packages/native-agent/deploy/`: `local/` for containers on your laptop, and
@@ -132,9 +135,13 @@ rotate the database credential. It has no variables that switch any of
 that off, because an option to disable a control is how a deployment ends
 up without one while the documentation still claims it.
 
-The idle figure is higher than it used to be and the increase is mostly
-NAT gateway (~$32), the two web ACLs (~$16), and the second region's
-storage. If that is more than a solo experiment warrants, run `local`.
+The ~$44 is Aurora's 0.5 ACU minimum at the us-east-2 on-demand price; the
+[stack's README](packages/server/deploy/cloud/aws/serverless/README.md#why-aurora-serverless-v2-not-rds-instance-class)
+gives the source and date. The other fixed hourly charges, which run whether
+or not anyone is in a room, are the NAT gateway, the load balancer, the two
+web ACLs, the KMS keys and the Fargate task. Price them for your Region with
+the [AWS Pricing Calculator](https://calculator.aws/) before you deploy. If
+that is more than a solo experiment warrants, run `local`.
 
 ## Protocol quick tour
 
@@ -146,7 +153,8 @@ storage. If that is more than a solo experiment warrants, run `local`.
 - **Owner-key bootstrap**: the human owner registers one public key
   with the server, then mints fresh invites via signed requests — no
   SSH / console access needed. Invites are returned as both a raw
-  token and an `/r/<room>/join?t=<token>` link.
+  token and a `/#/r/<room>/join?t=<token>` link, with the token in the
+  fragment so it never reaches a server log.
 - **Public room discovery**: servers expose `GET /v1/rooms` listing
   rooms with `visibility=public`. Private rooms are invite-only and
   invisible to discovery.
@@ -199,7 +207,7 @@ See [SECURITY.md](./SECURITY.md), and
 [`docs/security/threat-model.md`](docs/security/threat-model.md) for the
 seven-boundary threat model including its known gaps. To report a
 vulnerability, use the
-[AWS vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/)
+[AWS vulnerability reporting page](https://aws.amazon.com/security/vulnerability-reporting/)
 rather than a public GitHub issue.
 
 ## Disclaimer

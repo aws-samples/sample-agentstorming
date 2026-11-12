@@ -34,7 +34,6 @@ from pydantic import BaseModel, Field
 from ..domain.event import (
     TYPE_INTERVIEW_ENDED,
     TYPE_INTERVIEW_STARTED,
-    TYPE_PARTICIPANT_JOINED,
     TYPE_REGISTRATION_ACCEPTED,
     TYPE_REGISTRATION_REJECTED,
     TYPE_REGISTRATION_REQUEST,
@@ -42,7 +41,8 @@ from ..domain.event import (
 from ..domain.participant import Participant
 from ..domain.ids import make_pid
 from ..services import sig as sig_mod
-from ..services.jcs import canonicalise
+from ..services.signed_request import canonical_bytes, verify_ts
+from .deps import is_db_text
 
 router = APIRouter(tags=["registration"])
 
@@ -58,16 +58,23 @@ def _b64url_decode(s: str) -> bytes:
 
 def _verify_registration_ts(ts_str: str) -> None:
     """Reject signed candidate requests whose clock is more than ±5min off."""
-    try:
-        ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-    except ValueError:
-        raise HTTPException(status_code=400, detail={"code": "org.agentstorming.err.ts_invalid"})
-    if abs((datetime.now(timezone.utc) - ts).total_seconds()) > _MAX_CLOCK_SKEW_SECONDS:
-        raise HTTPException(status_code=400, detail={"code": "org.agentstorming.err.ts_skew"})
+    verify_ts(ts_str, _MAX_CLOCK_SKEW_SECONDS)
+
+
+#: A base64url Ed25519 public key is 43 characters (44 padded). The bound keeps
+#: a megabyte "pubkey" from reaching the rate limiter as a key at all.
+_PUBKEY_FIELD = Field(..., max_length=64, description="candidate Ed25519 pubkey, base64url")
+
+
+def _b64url_encode(b: bytes) -> str:
+    import base64
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode("ascii")
+
+
 
 
 class RegisterBody(BaseModel):
-    pubkey: str = Field(..., description="candidate Ed25519 pubkey, base64url")
+    pubkey: str = _PUBKEY_FIELD
     runs_as: Literal["agent", "human"] = "agent"
     declared: str = Field(default="", max_length=2000,
                           description="freeform: what the candidate claims to contribute")
@@ -84,15 +91,12 @@ class RegisterResponse(BaseModel):
 async def register(room_id: str, body: RegisterBody, request: Request) -> RegisterResponse:
     state = request.app.state
     room = await state.rooms.get(room_id)
-    if room is None:
+    # A private room answers exactly as a missing one. A distinct
+    # ``room_private`` 403 confirmed to an unauthenticated caller that a
+    # private room by that name exists.
+    if room is None or room.config.visibility != "public":
         raise HTTPException(
             status_code=404, detail={"code": "org.agentstorming.err.room_unknown"}
-        )
-    if room.config.visibility != "public":
-        raise HTTPException(
-            status_code=403,
-            detail={"code": "org.agentstorming.err.room_private",
-                    "message": "registration only available for public rooms"},
         )
 
     # Door open?
@@ -140,7 +144,8 @@ async def register(room_id: str, body: RegisterBody, request: Request) -> Regist
     # per-client-IP (slows pubkey-rotation spray). Both share the same
     # `register` bucket config.
     client_ip = request.client.host if request.client else "unknown"
-    await state.rate_limiter.check(f"pub:{body.pubkey}", "register")
+    # Keyed on the decoded key, so re-encodings of one key share a bucket.
+    await state.rate_limiter.check(f"pub:{_b64url_encode(pubkey)}", "register")
     await state.rate_limiter.check(f"ip:{client_ip}", "register")
 
     # Optional operator-provided filter hook (abuse / bot-detection).
@@ -172,17 +177,22 @@ async def register(room_id: str, body: RegisterBody, request: Request) -> Regist
             )
 
     pid = make_pid(pubkey, room_id)
+    already_member = HTTPException(
+        status_code=409, detail={"code": "org.agentstorming.err.already_member"}
+    )
     if await state.participants.get(room_id, pid) is not None:
-        raise HTTPException(
-            status_code=409, detail={"code": "org.agentstorming.err.already_member"}
-        )
+        raise already_member
 
     now = datetime.now(timezone.utc)
     candidate = Participant(
         room_id=room_id, pid=pid, pubkey=pubkey, affiliation="pending-interview",
         deputy_rank=None, joined_at=now, last_seen_at=now, runs_as=body.runs_as,
     )
-    await state.participants.insert(candidate)
+    # The read above misses a key a seated participant rotated to (its row keeps
+    # the old pid) and a racing registration; the insert catches both. Ignoring
+    # it opened an interview for a pid with no row.
+    if not await state.participants.insert(candidate):
+        raise already_member
 
     interview_id = secrets.token_urlsafe(16)
     # Route the knock at whoever actually holds the moderating seat — the
@@ -241,15 +251,16 @@ class RegistrationNonceResponse(BaseModel):
 async def issue_registration_nonce(room_id: str, request: Request) -> RegistrationNonceResponse:
     """One-shot 60s nonce for the candidate's signed credential request.
 
-    Shares the server's signed-request nonce store with the owner surface
-    (ADR-004); a nonce is a bare unguessable token with no authority of its
-    own, so the store is deliberately common. Unauthenticated by necessity —
-    the caller has no bearer token yet — and rate-limited per client IP.
+    Stored beside owner nonces but scoped ``registration``: it is accepted
+    only by the credential collection below, never by an owner route.
+    Unscoped, an anonymous caller could obtain here what the owner route
+    issues only to a signed request. Unauthenticated by necessity, since the
+    caller has no bearer token yet, and rate-limited per client IP.
     """
     state = request.app.state
     client_ip = request.client.host if request.client else "unknown"
     await state.rate_limiter.check(f"ip:{client_ip}", "register")
-    nonce, expires = await state.owner_nonces.issue()
+    nonce, expires = await state.owner_nonces.issue(scope="registration")
     return RegistrationNonceResponse(nonce=nonce, expires_at=expires.isoformat())
 
 
@@ -263,11 +274,11 @@ class RegistrationCredentialBody(BaseModel):
     ``pubkey``/``sig``, Ed25519-sign it, and bind a one-shot nonce.
     """
 
-    interview_id: str
-    nonce: str
-    ts: str
-    pubkey: str
-    sig: str
+    interview_id: str = Field(..., max_length=128)
+    nonce: str = Field(..., max_length=128)
+    ts: str = Field(..., max_length=64)
+    pubkey: str = _PUBKEY_FIELD
+    sig: str = Field(..., max_length=128)
 
 
 @router.post("/{room_id}/register/credentials")
@@ -287,9 +298,14 @@ async def collect_registration_credentials(
     can poll without special-casing, and 403 once rejected.
     """
     state = request.app.state
-    await state.rate_limiter.check(f"pub:{body.pubkey}", "register")
-
+    # The limiter runs only after the signature has verified, keyed on the
+    # decoded key. Charged first, on the raw string, any caller who read a
+    # pending candidate's pubkey from a snapshot could keep that candidate's
+    # poll at 429 with junk bodies naming it, and a new string per request grew
+    # the limiter without bound.
     _verify_registration_ts(body.ts)
+    if not is_db_text(body.interview_id):
+        raise HTTPException(status_code=400, detail={"code": "org.agentstorming.err.bad_body"})
     try:
         pubkey = _b64url_decode(body.pubkey)
     except Exception:
@@ -298,8 +314,9 @@ async def collect_registration_credentials(
         raise HTTPException(status_code=400, detail={"code": "org.agentstorming.err.bad_pubkey"})
 
     signed = body.model_dump(exclude={"pubkey", "sig"})
-    if not sig_mod.verify_blob(canonicalise(signed), body.sig, pubkey):
+    if not sig_mod.verify_blob(canonical_bytes(signed), body.sig, pubkey):
         raise HTTPException(status_code=403, detail={"code": "org.agentstorming.err.sig_invalid"})
+    await state.rate_limiter.check(f"pub:{_b64url_encode(pubkey)}", "register")
 
     interview = await state.interviews.get(body.interview_id)
     if not interview or interview["room_id"] != room_id:
@@ -339,7 +356,7 @@ async def collect_registration_credentials(
 
     # One-shot nonce, consumed last so a replay cannot burn a nonce before
     # the request has otherwise been proven valid.
-    if not await state.owner_nonces.consume(body.nonce):
+    if not await state.owner_nonces.consume(body.nonce, scope="registration"):
         raise HTTPException(
             status_code=409, detail={"code": "org.agentstorming.err.nonce_invalid"}
         )

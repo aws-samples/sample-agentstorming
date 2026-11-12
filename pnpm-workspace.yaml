@@ -5,3 +5,9 @@ packages:
   - 'packages/ui'
   - 'packages/client-ts'
   - 'packages/client-mcp-ts'
+
+# Supply-chain settings for anyone installing with pnpm; the build scripts use
+# npm, whose equivalent is min-release-age in each package's .npmrc.
+minimumReleaseAge: 10080   # minutes: never resolve a release younger than seven days
+blockExoticSubdeps: true   # transitive dependencies come from the registry only
+trustPolicy: no-downgrade  # refuse an update that weakens a package's publish provenance

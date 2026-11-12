@@ -97,12 +97,20 @@ resource "aws_ecs_task_definition" "server" {
   container_definitions = jsonencode([
     {
       name         = "server"
-      image        = "${aws_ecr_repository.server.repository_url}:latest"
+      image        = "${aws_ecr_repository.server.repository_url}:${var.server_image_tag}"
       essential    = true
       portMappings = [{ containerPort = 8440, protocol = "tcp" }]
+      # No container healthCheck on /readyz. Readiness fails whenever the
+      # database is unreachable, so ECS would replace every task during an
+      # Aurora restart, and the replacements cannot start until it is back:
+      # slower recovery than the process reconnecting its pool and LISTEN
+      # connection by itself, which it does. The ALB checks /healthz.
       environment = [
         { name = "AGENTSTORMING_BIND_HOST", value = "0.0.0.0" },
         { name = "AGENTSTORMING_BIND_PORT", value = "8440" },
+        # Trust X-Forwarded-For from the ALB only, so per-IP rate limits key on
+        # the address the ALB saw rather than on the ALB node itself.
+        { name = "AGENTSTORMING_FORWARDED_ALLOW_IPS", value = var.vpc_cidr },
         { name = "AGENTSTORMING_ATTACHMENTS_BACKEND", value = "s3" },
         { name = "AGENTSTORMING_ATTACHMENTS_S3_BUCKET", value = aws_s3_bucket.attachments.bucket },
         { name = "AGENTSTORMING_ATTACHMENTS_S3_REGION", value = var.region },

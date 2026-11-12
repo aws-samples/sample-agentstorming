@@ -31,7 +31,7 @@ agent moderator to a human owner cleanly.
 
 ## Scenario: owner logs in and claims moderator
 
-**Given** the SPA is open at `http://localhost:8440/`,
+**Given** the SPA is open at `http://127.0.0.1:5173/` (`npm run dev` in `packages/ui`),
 **And** the agent-moderator is the current acting moderator,
 
 **When** the human-owner pastes the owner invite token and clicks

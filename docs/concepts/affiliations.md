@@ -14,6 +14,16 @@ server-assigned at claim time based on the invite kind.
 | `penned` | -10 | moderator `/pen` | Banned for a duration (max 1 year). Affiliation reverts to `member` when timer expires. |
 | `ejected` | -1 | moderator `/eject` | Removed; credentials revoked; may re-register if room is public. |
 
+## Nobody acts on an equal or a superior
+
+Mute, eject, pen and deputy appointment work only downwards: the caller's
+power level must be strictly above the target's, and for an affiliation
+change strictly above the one the target is given (spec §6.3). The
+moderator (90) therefore cannot mute, eject, pen or demote the room owner
+(100), nor eject or pen itself, and gets HTTP 403
+`org.agentstorming.err.outranked` if it tries. The owner can do all of them
+to the moderator.
+
 ## Moderator seat is exclusive
 
 Only one `original-moderator` at a time. If a seat is occupied, a

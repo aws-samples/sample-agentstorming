@@ -77,7 +77,7 @@ class BearerTokenProvider(Provider):
             headers={self.header_name: self.header_format.format(token=self._token)},
         )
 
-    def prepare_credentials(self, target: str = "") -> ProviderResult:
+    def prepare_credentials(self, target: str = "", **session_vars: str) -> ProviderResult:
         """Return the bare token in a credentials_json blob.
 
         Used by SDK paths that need an api_key directly (rather than an

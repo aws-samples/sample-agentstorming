@@ -5,16 +5,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from .base import Database
+from .base import Database, hash_secret
 
-
-def hash_token(token: str) -> bytes:
-    return hashlib.sha256(token.encode("ascii")).digest()
+hash_token = hash_secret
 
 
 def generate_token(nbytes: int = 24) -> str:
@@ -40,12 +37,30 @@ class InviteRepo:
             )
         return inv_id, token
 
-    async def redeem(self, token: str, pid: str) -> dict | None:
+    async def peek(self, token: str) -> dict | None:
+        """The invite's row if the token is valid now (unconsumed, unexpired), else None.
+
+        Does not consume it. :meth:`redeem` re-checks under a row lock, so a
+        token that passes here and is spent meanwhile still fails there.
+        """
+        token_h = hash_token(token)
+        async with self._db.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, room_id, kind, expires_at
+                  FROM invites
+                 WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now()
+                """,
+                token_h,
+            )
+        return dict(row) if row else None
+
+    async def redeem(self, token: str, pid: str, *, conn=None) -> dict | None:
         """Atomically mark token consumed; return invite info or None if invalid."""
         token_h = hash_token(token)
         now = datetime.now(timezone.utc)
-        async with self._db.tx() as conn:
-            row = await conn.fetchrow(
+        async with self._db.use(conn) as c, c.transaction():
+            row = await c.fetchrow(
                 """
                 SELECT id, room_id, kind, expires_at, consumed_at
                   FROM invites
@@ -59,7 +74,7 @@ class InviteRepo:
                 return None
             if row["expires_at"] < now:
                 return None
-            await conn.execute(
+            await c.execute(
                 "UPDATE invites SET consumed_at=$1, consumed_by=$2 WHERE id=$3",
                 now, pid, row["id"],
             )

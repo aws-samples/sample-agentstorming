@@ -9,6 +9,9 @@ Subcommands:
 - ``owner print-pubkey``    Print the base64url public key.
 - ``owner request-invite``  Sign a request to the server and print a
                             fresh invite token.
+- ``owner list-rooms``      Signed: every room, private ones included.
+- ``owner get-room``        Signed: one room's state and config.
+- ``owner list-keys``       Signed: the server's active owner keys.
 - ``install-skill``         Copy the Agent Storming skill into a tool's
                             discovery path (claude-code, codex, kiro,
                             windsurf, cursor, deepagents, ...).
@@ -98,6 +101,29 @@ def _cmd_owner_request_invite(args: argparse.Namespace) -> int:
     return asyncio.run(run())
 
 
+def _cmd_owner_signed_read(args: argparse.Namespace) -> int:
+    """Run one of the signed owner reads and print its JSON."""
+    async def run() -> int:
+        kwargs = {
+            "key_path": Path(args.path).expanduser() if args.path else None,
+            "verify_tls": not _check_insecure(args.insecure, args.base_url),
+        }
+        try:
+            if args.owner_cmd == "list-rooms":
+                resp = await owner_mod.list_rooms(args.base_url, **kwargs)
+            elif args.owner_cmd == "get-room":
+                resp = await owner_mod.get_room(args.base_url, args.room, **kwargs)
+            else:
+                resp = await owner_mod.list_keys(args.base_url, **kwargs)
+        except Exception as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 2
+        print(json.dumps(resp, indent=2))
+        return 0
+
+    return asyncio.run(run())
+
+
 def _cmd_owner_approve(args: argparse.Namespace) -> int:
     """Owner-side: respond to an outstanding broker approval_request.
 
@@ -165,6 +191,22 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     orq.set_defaults(func=_cmd_owner_request_invite)
+
+    for name, help_text in (
+        ("list-rooms", "Signed: list every room, private ones included"),
+        ("get-room", "Signed: show one room's state and config"),
+        ("list-keys", "Signed: list the server's active owner keys"),
+    ):
+        rd = o_sub.add_parser(name, help=help_text)
+        rd.add_argument("--base-url", required=True)
+        if name == "get-room":
+            rd.add_argument("--room", required=True)
+        rd.add_argument("--path", default=None)
+        rd.add_argument(
+            "--insecure", action="store_true",
+            help="DANGEROUS: skip TLS verification. Localhost development only.",
+        )
+        rd.set_defaults(func=_cmd_owner_signed_read)
 
     oa = o_sub.add_parser("approve", help="Approve/deny a pending broker approval_request")
     oa.add_argument("--approval-id", required=True)

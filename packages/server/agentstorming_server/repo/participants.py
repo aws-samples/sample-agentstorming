@@ -15,18 +15,26 @@ class ParticipantRepo:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    async def insert(self, p: Participant) -> None:
-        async with self._db.acquire() as conn:
-            await conn.execute(
+    async def insert(self, p: Participant, *, conn=None) -> bool:
+        """Seat ``p``. False when the pid already had a row, which is left as it was.
+
+        No conflict target: the pid and the (room, pubkey) pair are both unique,
+        and a racing insert can trip either. Naming only the pid let the pubkey
+        index raise, and the losing claim answered 500.
+        """
+        async with self._db.use(conn) as c:
+            seated = await c.fetchval(
                 """
                 INSERT INTO participants(room_id, pid, pubkey, affiliation, deputy_rank,
                                          joined_at, last_seen_at, runs_as)
                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
-                ON CONFLICT (room_id, pid) DO NOTHING
+                ON CONFLICT DO NOTHING
+                RETURNING pid
                 """,
                 p.room_id, p.pid, p.pubkey, p.affiliation, p.deputy_rank, p.joined_at,
                 getattr(p, "runs_as", "agent"),
             )
+        return seated is not None
 
     async def get(self, room_id: str, pid: str) -> Participant | None:
         async with self._db.acquire() as conn:
@@ -122,9 +130,10 @@ class ParticipantRepo:
                 room_id, pid,
             )
 
-    async def get_by_affiliation(self, room_id: str, affiliation: str) -> Participant | None:
-        async with self._db.acquire() as conn:
-            row = await conn.fetchrow(
+    async def get_by_affiliation(self, room_id: str, affiliation: str, *,
+                                 conn=None) -> Participant | None:
+        async with self._db.use(conn) as c:
+            row = await c.fetchrow(
                 "SELECT * FROM participants WHERE room_id=$1 AND affiliation=$2 AND left_at IS NULL LIMIT 1",
                 room_id, affiliation,
             )

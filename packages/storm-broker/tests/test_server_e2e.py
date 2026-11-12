@@ -31,11 +31,18 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _short_dir() -> Path:
+    """A socket directory short enough for AF_UNIX.
+
+    macOS caps sun_path at 104 characters and pytest's tmp_path exceeds it.
+    """
+    import tempfile
+    return Path(tempfile.mkdtemp(prefix="sb-", dir="/tmp"))  # nosec B108 - mkdtemp creates 0700; /tmp is deliberate because macOS caps AF_UNIX paths at 104 chars and pytest's tmp_path exceeds it
+
+
 @pytest_asyncio.fixture
 async def broker(tmp_path: Path):
-    # macOS AF_UNIX sun_path limit is 104 chars; pytest tmp_path can exceed.
-    import tempfile
-    short_dir = Path(tempfile.mkdtemp(prefix="sb-", dir="/tmp"))  # nosec B108 - mkdtemp creates 0700; /tmp is deliberate because macOS caps AF_UNIX paths at 104 chars and pytest's tmp_path exceeds it
+    short_dir = _short_dir()
     sock_path = str(short_dir / "b.sock")
     audit_path = short_dir / "audit.ndjson"
     chain = AuditChain(audit_path, secrets.token_bytes(32))
@@ -150,3 +157,52 @@ async def test_prepare_headers_provider_unknown(broker):
         await loop.run_in_executor(
             None, lambda: c.prepare_headers(provider="nonexistent", url="https://x"),
         )
+
+
+@pytest.mark.asyncio
+async def test_session_labels_reach_the_provider_and_uid_cannot_be_forged(tmp_path: Path):
+    """The shim sends persona_pid, room_id and task_id as top-level params; the
+    broker read only session_vars, so every label rendered "unset" in the STS
+    session name. The uid comes from SO_PEERCRED and must win over any claim."""
+    from agentstorming_client.broker_client import BrokerClient
+    from storm_broker.providers.base import Provider, ProviderResult
+
+    seen: list[dict] = []
+
+    class Recorder(Provider):
+        name = "rec"
+
+        def prepare_credentials(self, target: str, **session_vars: str) -> ProviderResult:
+            seen.append(dict(session_vars))
+            return ProviderResult(credentials_json={"ok": True})
+
+    short_dir = _short_dir()
+    sock_path = str(short_dir / "b.sock")
+    my_uid = os.getuid()
+    srv = BrokerServer(
+        socket_path=sock_path,
+        providers={"rec": Recorder({})},
+        policy_for_uid={my_uid: PolicyEngine([
+            Capability(tool="rec.credentials", args={}, rate_per_second=100.0, requires_trust="user"),
+        ])},
+        audit_chain=AuditChain(short_dir / "audit.ndjson", secrets.token_bytes(32)),
+        allowed_uids={my_uid},
+    )
+    await srv.start()
+    task = asyncio.create_task(srv.serve_forever())
+    try:
+        c = BrokerClient(socket_path=sock_path)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda: c.prepare_credentials(
+            provider="rec", target="aws", persona_pid="alpha", room_id="room-1", task_id="t-7",
+            session_vars={"uid": "0", "extra": "x"},
+        ))
+    finally:
+        await srv.stop()
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+    assert seen == [{"extra": "x", "persona_pid": "alpha", "room_id": "room-1",
+                     "task_id": "t-7", "uid": str(my_uid)}]

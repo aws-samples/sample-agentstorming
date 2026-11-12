@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -15,7 +14,7 @@ import asyncpg
 import pytest
 import pytest_asyncio
 
-from agentstorming_server.app import create_app
+from agentstorming_server.app import create_app, load_sql
 from agentstorming_server.config import Settings
 from agentstorming_server.domain.room import Room, RoomConfig
 from agentstorming_server.repo.base import Database
@@ -51,13 +50,22 @@ def pytest_collection_modifyitems(config, items):
 
 #: Every table the schema creates, truncated as one static statement. Kept as a
 #: literal rather than built from a list so the SQL contains no interpolation at
-#: all. If the schema gains a table and this is not updated, tests will leak rows
-#: between cases and fail — which is the right failure mode.
+#: all. Six tables were once missing from it, owner_keys among them, and nothing
+#: failed: rows simply leaked between cases, and a leaked owner key stops the app
+#: seeding the configured one. ``test_truncate_covers_schema`` now holds this
+#: list to the schema.
+_TRUNCATE_TABLES = (
+    "nonces", "idempotency", "mutes", "grants", "hands", "attachments", "summaries",
+    "documents", "tokens", "invites", "events", "participants", "admin_tokens",
+    "owner_challenges", "registration_requests", "ignore_entries", "interviews",
+    "owner_keys", "owner_nonces", "registration_doors", "room_owner_keys", "rooms",
+)
 _TRUNCATE_ALL = (
     "TRUNCATE TABLE "
     "nonces, idempotency, mutes, grants, hands, attachments, summaries, "
     "documents, tokens, invites, events, participants, admin_tokens, "
-    "owner_challenges, registration_requests, rooms "
+    "owner_challenges, registration_requests, ignore_entries, interviews, "
+    "owner_keys, owner_nonces, registration_doors, room_owner_keys, rooms "
     "CASCADE"
 )
 
@@ -69,15 +77,10 @@ async def reset_db():
         pytest.skip("no DB")
     conn = await asyncpg.connect(DSN)
     try:
-        # Apply schema (idempotent) then truncate everything.
-        #
-        # The schema is this package's own *.sql, read from disk and executed as
-        # DDL. There is no interpolation and no caller input; a schema cannot be
-        # applied through bound parameters, so this is the only shape available.
-        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query
-        schema_dir = Path(__file__).resolve().parents[1] / "schema"
-        sql = "\n".join((p.read_text() for p in sorted(schema_dir.glob("*.sql"))))
-        await conn.execute(sql)  # nosemgrep
+        # Apply schema (idempotent) then truncate everything. The schema is this
+        # package's own *.sql, loaded by the same function the server boots with,
+        # so the tests run against exactly the DDL production applies.
+        await conn.execute(load_sql(Path(__file__).resolve().parents[1] / "schema"))
 
         # One static statement rather than an f-string per table in a loop.
         # Table identifiers cannot be bound as parameters, so the previous
@@ -108,9 +111,11 @@ async def app_client(reset_db, tmp_path):
 @pytest_asyncio.fixture
 async def fresh_room(reset_db):
     """Create a room with one participant-invite and one moderator-invite."""
-    db = Database(DSN); await db.connect()
+    db = Database(DSN)
+    await db.connect()
     try:
-        rooms = RoomRepo(db); invites = InviteRepo(db)
+        rooms = RoomRepo(db)
+        invites = InviteRepo(db)
         priv, pub = generate_keypair()
         room = Room(
             id="test-room",
@@ -136,9 +141,11 @@ async def fresh_room(reset_db):
 @pytest_asyncio.fixture
 async def fresh_public_room(reset_db):
     """A ``visibility=public`` room, so ``/register`` is reachable."""
-    db = Database(DSN); await db.connect()
+    db = Database(DSN)
+    await db.connect()
     try:
-        rooms = RoomRepo(db); invites = InviteRepo(db)
+        rooms = RoomRepo(db)
+        invites = InviteRepo(db)
         priv, pub = generate_keypair()
         room = Room(
             id="public-room",
@@ -160,9 +167,11 @@ async def fresh_public_room(reset_db):
 @pytest_asyncio.fixture
 async def fresh_planning_room(reset_db):
     """A room created in Stage-13 ``planning`` mode."""
-    db = Database(DSN); await db.connect()
+    db = Database(DSN)
+    await db.connect()
     try:
-        rooms = RoomRepo(db); invites = InviteRepo(db)
+        rooms = RoomRepo(db)
+        invites = InviteRepo(db)
         priv, pub = generate_keypair()
         room = Room(
             id="planning-room",
@@ -180,3 +189,23 @@ async def fresh_planning_room(reset_db):
                 "moderator_invite": mt}
     finally:
         await db.close()
+
+
+@pytest_asyncio.fixture
+async def owner(reset_db, tmp_path):
+    """An app whose owner key is seeded from settings, plus that keypair."""
+    import base64
+
+    import httpx
+    priv, pub = generate_keypair()
+    os.environ["AGENTSTORMING_DSN"] = DSN
+    settings = Settings(
+        dsn=DSN,
+        attachments_local_dir=tmp_path / "attachments",
+        owner_pubkey=base64.urlsafe_b64encode(pub).rstrip(b"=").decode("ascii"),
+    )
+    app = create_app(settings)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client, app.router.lifespan_context(app):
+        yield {"app": app, "client": client, "priv": priv, "pub": pub}

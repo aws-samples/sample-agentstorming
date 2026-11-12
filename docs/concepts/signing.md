@@ -75,12 +75,25 @@ The Python SDK exposes this as `StormClient.rotate_key()`.
 
 ## Owner-signed requests (HTTP CRUD)
 
-Owner endpoints (`/v1/owner/*`) use the same primitive for HTTP CRUD:
+Every owner endpoint (`/v1/owner/*`) needs an owner signature, reads and the
+nonce endpoint included:
 
-1. `GET /v1/owner/nonce` → `{nonce, expires_at}`.
-2. Canonicalise the request body (minus `pubkey + sig`).
-3. Ed25519-sign with your owner private key.
-4. POST/PATCH/DELETE with `pubkey + sig` appended to the body.
+1. `GET /v1/owner/nonce` → `{nonce, expires_at}`. Sign `{ts, op}` with
+   `op = "GET /v1/owner/nonce"` and send `X-AgentStorming-Owner-Ts`, `-Pubkey`
+   and `-Sig`; there is no nonce yet to include.
+2. Build the payload: the request's fields, `nonce`, `ts`, and `op`, the
+   method and API path you are about to call (`"GET /v1/owner/rooms"`). In
+   the path, write `%` as `%25` and then `?` as `%3F`, after decoding it.
+3. JCS-canonicalise it and Ed25519-sign with your owner private key.
+4. For `POST`/`PATCH`/`DELETE`, send `nonce`, `ts`, `pubkey` and `sig` in the
+   body beside the other fields. For a `GET`, send them in the
+   `X-AgentStorming-Owner-Nonce`, `-Ts`, `-Pubkey` and `-Sig` headers.
 
-Nonces are one-shot with a 60s TTL; timestamps are verified within
-±5 minutes.
+`op` is signed but not sent; the server rebuilds it from the request, so a
+signature made for one endpoint fails on any other. Nonces are one-shot with a
+60s TTL; timestamps need a UTC offset and are verified within ±5 minutes. A
+request the server refuses before the nonce check keeps its nonce; one refused
+afterwards (for example a body field the endpoint does not know) has spent it.
+The SDKs do all of this:
+`owner.list_rooms()` / `listRooms()` and friends in Python and TypeScript, and
+`agentstorming owner list-rooms|get-room|list-keys` on the CLI.

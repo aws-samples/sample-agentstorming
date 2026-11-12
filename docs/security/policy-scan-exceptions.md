@@ -10,9 +10,12 @@ infrastructure, and with Bandit, Semgrep, detect-secrets, grype, npm audit,
 cfn-nag, cdk-nag and syft via
 [ASH](https://github.com/awslabs/automated-security-helper) for everything else.
 
-The published tree contains **no scanner suppressions at all**: no
-`checkov:skip` (the export script fails a publish if it finds one) and no
-`nosemgrep`.
+The published tree contains **no Checkov or Semgrep suppressions**: no
+`checkov:skip` and no `nosemgrep`, and the export script fails a publish if it
+finds either. An earlier revision said this while two `# nosemgrep` comments sat
+in a test fixture and the export checked only for `checkov:skip`; both comments
+are gone and the export now checks for both. The `# nosec` comments are the
+exception, inventoried below.
 
 Everything that is not fixed is recorded here rather than left as a comment in a
 file, because a suppression is invisible unless you are already reading the line
@@ -22,20 +25,23 @@ it sits on.
 
 | Scanner | Critical | High | Medium | Low |
 |---|---|---|---|---|
-| Checkov 3.3.16 (all frameworks) | 2 | 0 | 0 | 0 |
-| Bandit (tests included) | 0 | 0 | 0 | 411 |
-| Bandit **`--ignore-nosec`** | 0 | **0** | **17** | 418 |
+| Checkov 3.4.0 (all frameworks) | 2 | 0 | 0 | 0 |
+| Bandit 1.9.4 (tests included) | 0 | 0 | 0 | 737 |
+| Bandit 1.9.4 **`--ignore-nosec`** | 0 | **0** | **17** | 742 |
 | Semgrep / opengrep | 0 | 0 | 0 | 0 |
 | grype, npm audit, syft | 0 | 0 | 0 | 0 |
 | cfn-nag, cdk-nag | 0 | 0 | 0 | 0 |
 
 The two Checkov findings are the S3 log-delivery targets described below. Checkov's
-*passed* count is version-dependent — 763 under 3.2.484 and 889 under 3.3.16,
-because newer releases add rules — so it is quoted with a version or not at all.
-The failed count is 2 under both. The
+*passed* count is version-dependent, because newer releases add rules: 763 under
+3.2.484, 889 under 3.3.16, and 890 under 3.4.0, which adds CKV_AWS_394 (pin the
+Availability Zones). So it is quoted with a version or not at all. The failed
+count is 2 under all three. The
 Bandit lows are `assert` in tests (B101), `random` for non-cryptographic
 jitter (B311), and `try/except/pass` in teardown paths (B110/B112); none is a
-credential or an injection path.
+credential or an injection path. The low count grows with the test suite, since
+most of it is B101, so it is quoted with the tool version and nothing else is
+inferred from it.
 
 **Read the two Bandit rows together, and prefer the second.** The first honours
 the `# nosec` comments in the tree; the second discards all of them. The number
@@ -182,41 +188,24 @@ this is not how.
   repository's set checks for that; it was added because the S3 guidance
   mandates it and reading the guidance is how it was noticed.
 
-## One accepted Semgrep false positive
+## The Semgrep subprocess finding, and why it is gone
 
-`scripts/e2e-agentcore.py` is reported HIGH by Semgrep OSS for
-`python.lang.security.audit.dangerous-subprocess-use-audit`. It is a false
-positive, it is not suppressed, and it will appear in every platform scan.
+`scripts/e2e-agentcore.py` used to be reported HIGH for
+`python.lang.security.audit.dangerous-subprocess-use-audit`, and this section
+recorded it as an accepted false positive. The call was
+`subprocess.Popen([sys.executable, "-m", "agentstorming_agent.agentcore_app"])`:
+a fixed argv with no shell. The rule cannot tell `sys.executable` from a variable,
+and the only form it accepts, `["python3", "-m", ...]`, would have run whatever
+`python3` is on `PATH` instead of the project venv. In-code suppression does
+nothing on the review platform, which is correct for a review tool.
 
-The call is `subprocess.Popen(_AGENT_ARGV, shell=False, ...)` where
-`_AGENT_ARGV = [sys.executable, "-m", "agentstorming_agent.agentcore_app"]`.
-Fixed argv, no shell, nothing derived from input, in a test harness that launches
-the agent to check its container contract.
-
-**Why it is not fixed.** The rule excludes only a list whose first two elements
-are string *literals*, so any argv built from `sys.executable` is flagged however
-it is written — measured, not assumed: the module-constant form and the inline
-form are both flagged, `["python3", "-m", ...]` is clean. Taking the clean form
-would run whatever `python3` is on `PATH` rather than the interpreter the script
-is already running under. The harness only works inside the project venv, since
-it imports the packages it exercises, so that would be a real defect bought with
-a quiet report.
-
-**Why it is not suppressed.** Both `# nosemgrep` forms were tried and measured.
-A rule-scoped comment cleared a local run and did nothing to the platform scan —
-the rule's fully qualified id differs between the registry copy and a locally
-loaded one. A bare `# nosemgrep` also cleared a local run and also did nothing.
-The platform runs Semgrep with in-code suppression disabled, which is correct for
-a review tool: content under review should not be able to silence the review.
-
-So the comment was removed. A suppression that suppresses nothing is worse than
-none, because the next reader takes it for handled.
-
-**Why it is safe.** The rule is an *audit* rule; its message asks a human to
-audit the call rather than asserting a vulnerability. The audit: `_AGENT_ARGV` is
-a module-level constant of `sys.executable` and two string literals, `shell=False`,
-and no element is reachable from any input to the script. There is no injection
-point.
+The harness now launches the agent with `multiprocessing` (`spawn`) and `runpy`
+instead. `spawn` runs the child on the same interpreter by construction, and no
+command line is built at all, so there is no argv for input to reach. That is a
+narrower design, not the same call in a form the rule cannot see: the
+`subprocess` import, its `# nosec B404` and the `# nosec B603` went with it. The
+harness behaves as before. Its seven end-to-end checks pass, and an agent that
+dies at startup is still reported with its exit code and its log.
 
 ## Bandit: a note on tool versions
 

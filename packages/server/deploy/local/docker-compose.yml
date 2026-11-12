@@ -3,7 +3,8 @@
 
 # Agent Storming — local deployment (docker-compose)
 #
-# Brings up Postgres + server + bundled SPA at http://localhost:8440.
+# Brings up Postgres + the API server at http://localhost:8440. The web UI
+# is a separate Vite app: cd packages/ui && npm run dev.
 # Intended for laptop development and zero-AWS-account quickstart.
 #
 # Usage:

@@ -51,5 +51,7 @@ class Provider:
     def prepare_headers(self, target: str, method: str, url: str, body: bytes | None = None) -> ProviderResult:
         raise NotImplementedError
 
-    def prepare_credentials(self, target: str) -> ProviderResult:
+    def prepare_credentials(self, target: str, **session_vars: str) -> ProviderResult:
+        """``session_vars`` always carries ``uid`` (the broker-verified peer)
+        plus any labels the agent sent; providers that do not use them ignore them."""
         raise NotImplementedError

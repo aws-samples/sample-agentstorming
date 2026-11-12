@@ -59,31 +59,53 @@ class OwnerNonceRepo:
         self.db = db
         self.ttl_seconds = ttl_seconds
 
-    async def issue(self) -> tuple[str, datetime]:
+    async def issue(self, *, scope: str = "owner") -> tuple[str, datetime]:
+        """Issue a nonce usable only by requests of ``scope`` ("owner" or "registration")."""
         nonce = secrets.token_urlsafe(24)
         expires = datetime.now(timezone.utc) + timedelta(seconds=self.ttl_seconds)
         async with self.db.acquire() as conn:
             await conn.execute(
-                "INSERT INTO owner_nonces(nonce, expires_at) VALUES ($1, $2)",
+                "INSERT INTO owner_nonces(nonce, expires_at, scope) VALUES ($1, $2, $3)",
                 nonce,
                 expires,
+                scope,
             )
         return nonce, expires
 
-    async def consume(self, nonce: str) -> bool:
-        """Mark a nonce consumed. Returns True iff it was valid + unexpired + unused."""
+    async def is_live(self, nonce: str, *, scope: str = "owner") -> bool:
+        """Whether ``nonce`` could be consumed now. Does not consume it."""
+        async with self.db.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT 1 FROM owner_nonces "
+                "WHERE nonce = $1 AND scope = $2 AND consumed_at IS NULL AND expires_at > now()",
+                nonce,
+                scope,
+            )
+        return row is not None
+
+    async def consume(self, nonce: str, *, scope: str = "owner") -> bool:
+        """Mark a nonce consumed. Returns True iff it was valid + unexpired + unused, in ``scope``."""
         async with self.db.acquire() as conn:
             row = await conn.fetchrow(
                 "UPDATE owner_nonces SET consumed_at = now() "
-                "WHERE nonce = $1 AND consumed_at IS NULL AND expires_at > now() "
+                "WHERE nonce = $1 AND scope = $2 AND consumed_at IS NULL AND expires_at > now() "
                 "RETURNING nonce",
                 nonce,
+                scope,
             )
         return bool(row)
 
     async def purge_expired(self) -> int:
+        """Delete nonces that expired over an hour ago; return how many.
+
+        Called by the governance ticker. It had no caller before, so every
+        nonce ever issued, consumed or not, stayed in the table.
+        """
         async with self.db.acquire() as conn:
-            row = await conn.fetchval(
-                "DELETE FROM owner_nonces WHERE expires_at < now() - interval '1 hour' RETURNING 1"
+            status = await conn.execute(
+                "DELETE FROM owner_nonces WHERE expires_at < now() - interval '1 hour'"
             )
-        return int(row or 0)
+        try:
+            return int(status.rsplit(" ", 1)[-1])
+        except (ValueError, AttributeError):
+            return 0

@@ -16,6 +16,22 @@ variable "region" {
   default = "us-east-2"
 }
 
+# The two Availability Zones for the subnets. Null means the region's "a" and
+# "b" zones. Set it where those do not both exist: in many accounts
+# ap-northeast-1 has no "b". Changing it on a running stack replaces the subnets,
+# the NAT gateways and the Aurora cluster.
+variable "availability_zone_names" {
+  type    = list(string)
+  default = null
+
+  validation {
+    # A conditional, not ||: Terraform before 1.12 evaluates both sides of ||,
+    # and length(null) fails, so every plan with the default would.
+    condition     = var.availability_zone_names == null ? true : length(var.availability_zone_names) == 2
+    error_message = "availability_zone_names must name exactly two zones."
+  }
+}
+
 variable "aws_profile" {
   type    = string
   default = "default"
@@ -246,4 +262,20 @@ variable "allowed_bedrock_model_arns" {
     "arn:aws:bedrock:*::foundation-model/anthropic.claude-*",
     "arn:aws:bedrock:*:*:inference-profile/*anthropic.claude-*",
   ]
+}
+
+variable "server_image_tag" {
+  description = <<-DESC
+    Tag of the server image in the stack's ECR repository, for example the
+    commit SHA it was built from. The repository has immutable tags, so a tag
+    always names one image: deploying a new build means pushing a new tag and
+    applying with it. It used to be hard-coded as "latest", which the immutable
+    repository refuses to overwrite, so the documented update could not work.
+  DESC
+  type        = string
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.server_image_tag)) && var.server_image_tag != "latest"
+    error_message = "server_image_tag must be a valid image tag other than \"latest\", such as the commit SHA."
+  }
 }

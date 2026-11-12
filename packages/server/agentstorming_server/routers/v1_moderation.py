@@ -20,9 +20,84 @@ from ..domain.event import (
     TYPE_PARTICIPANT_LEFT,
     TYPE_UNMUTE,
 )
-from .deps import public_base_url
+from ..domain.participant import affiliation_power_level
+from .deps import MAX_INVITE_TTL_SECONDS, invite_link, is_db_text, public_base_url
 
 router = APIRouter(tags=["moderation"])
+
+#: The protocol's longest duration (§12.3), and far below where adding it to
+#: now overflows a datetime: a mute of 10**12 seconds used to be a 500.
+MAX_DURATION_SECONDS = 31_536_000
+_MAX_PID_LENGTH = 512
+_MAX_REASON_LENGTH = 1_000
+
+
+# These bodies are read by hand, and int() on "abc", UUID() on 5 or a pid
+# holding a NUL each raised inside the handler, so a typo answered 500.
+
+
+def _bad_body(message: str) -> HTTPException:
+    return HTTPException(400, detail={"code": "org.agentstorming.err.bad_body", "message": message})
+
+
+def _target_pid(body: dict[str, Any]) -> str:
+    v = body.get("target_pid")
+    if not is_db_text(v) or not v or len(v) > _MAX_PID_LENGTH:
+        raise _bad_body("target_pid must be a participant id")
+    return v
+
+
+def _int_field(body: dict[str, Any], name: str, lo: int, hi: int, *, required: bool) -> int | None:
+    """An integer in ``lo..hi``; absent or null gives None unless required.
+
+    JSON integers only: not "60", not 60.0, not true.
+    """
+    v = body.get(name)
+    if v is None:
+        if required:
+            raise _bad_body(f"{name} required")
+        return None
+    if type(v) is not int or not lo <= v <= hi:
+        raise _bad_body(f"{name} must be an integer from {lo} to {hi}")
+    return v
+
+
+def _uuid_field(body: dict[str, Any], name: str) -> UUID | None:
+    v = body.get(name)
+    if v is None:
+        return None
+    if isinstance(v, str):
+        try:
+            return UUID(v)
+        except ValueError:
+            pass
+    raise _bad_body(f"{name} must be a UUID")
+
+
+async def _target(state, room_id: str, pid: str):
+    p = await state.participants.get(room_id, pid)
+    if p is None:
+        raise HTTPException(404, detail={"code": "org.agentstorming.err.unknown_participant",
+                                         "message": "participant not found"})
+    return p
+
+
+async def _outranks(state, room_id: str, principal, target_pid: str, new_power: int | None):
+    """§6.3: P may change Q only while P's power level is strictly above Q's,
+    and, for an affiliation change, strictly above the one Q is given.
+
+    Eject, pen, mute and deputy assignment checked only that the caller held
+    the seat, so the moderator (90) could eject, pen, mute or demote the room
+    owner (100), whose seat outranks it.
+    """
+    target = await _target(state, room_id, target_pid)
+    mine = principal.participant.power_level
+    if mine <= target.power_level or (new_power is not None and mine <= new_power):
+        raise HTTPException(403, detail={
+            "code": "org.agentstorming.err.outranked",
+            "message": "the target's power level is not below the caller's (§6.3)",
+        })
+    return target
 
 
 @router.post("/{room_id}/grants")
@@ -31,14 +106,12 @@ async def grant_turn(room_id: str, body: dict[str, Any], request: Request,
     state = request.app.state
     principal = await state.auth.require_moderator(room_id, authorization)
 
-    target_pid = body.get("target_pid")
-    if not target_pid:
-        raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_body", "message": "target_pid required"})
-    hand_id = body.get("hand_id")
-    hand_uuid = UUID(hand_id) if hand_id else None
-    ttl_seconds = int(body.get("ttl_seconds") or 0)
+    target_pid = _target_pid(body)
+    hand_uuid = _uuid_field(body, "hand_id")
+    ttl_seconds = _int_field(body, "ttl_seconds", 1, MAX_DURATION_SECONDS, required=False)
+    await _target(state, room_id, target_pid)
     room = await state.rooms.get(room_id)
-    if ttl_seconds <= 0:
+    if ttl_seconds is None:
         ttl_seconds = room.config.go_speak_ttl_seconds
 
     ttl_expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
@@ -68,11 +141,9 @@ async def mute(room_id: str, body: dict[str, Any], request: Request,
     state = request.app.state
     principal = await state.auth.require_moderator(room_id, authorization)
 
-    target_pid = body.get("target_pid")
-    duration = int(body.get("duration_seconds") or 0)
-    if not target_pid or duration <= 0:
-        raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_body",
-                                         "message": "target_pid and positive duration_seconds required"})
+    target_pid = _target_pid(body)
+    duration = _int_field(body, "duration_seconds", 1, MAX_DURATION_SECONDS, required=True)
+    await _outranks(state, room_id, principal, target_pid, None)
 
     now = datetime.now(timezone.utc)
     expires = now + timedelta(seconds=duration)
@@ -97,9 +168,8 @@ async def eject(room_id: str, body: dict[str, Any], request: Request,
                 authorization: str | None = Header(default=None)) -> dict:
     state = request.app.state
     principal = await state.auth.require_moderator(room_id, authorization)
-    target_pid = body.get("target_pid")
-    if not target_pid:
-        raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_body", "message": "target_pid required"})
+    target_pid = _target_pid(body)
+    await _outranks(state, room_id, principal, target_pid, affiliation_power_level("ejected", None))
 
     await state.participants.set_affiliation(room_id, target_pid, "ejected", None)
     await state.participants.set_left(room_id, target_pid, datetime.now(timezone.utc))
@@ -117,15 +187,13 @@ async def pen(room_id: str, body: dict[str, Any], request: Request,
               authorization: str | None = Header(default=None)) -> dict:
     state = request.app.state
     principal = await state.auth.require_moderator(room_id, authorization)
-    target_pid = body.get("target_pid")
-    duration = int(body.get("duration_seconds") or 0)
-    max_pen = state.settings.invite_ttl_seconds_default  # overwritten below by room config
+    target_pid = _target_pid(body)
+    max_pen = MAX_DURATION_SECONDS
     room = await state.rooms.get(room_id)
     if room is not None:
-        max_pen = room.config.pen_max_duration_seconds
-    if not target_pid or duration <= 0 or duration > max_pen:
-        raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_body",
-                                         "message": f"target_pid required; duration 0<d<={max_pen}"})
+        max_pen = min(max_pen, room.config.pen_max_duration_seconds)
+    duration = _int_field(body, "duration_seconds", 1, max_pen, required=True)
+    await _outranks(state, room_id, principal, target_pid, affiliation_power_level("penned", None))
     until = datetime.now(timezone.utc) + timedelta(seconds=duration)
     await state.participants.set_affiliation(room_id, target_pid, "penned", None)
     await state.participants.set_penned_until(room_id, target_pid, until)
@@ -150,11 +218,9 @@ async def assign_deputy(room_id: str, body: dict[str, Any], request: Request,
             409, detail={"code": "org.agentstorming.err.deputies_disabled",
                          "message": "deputies_enabled=false for this room"},
         )
-    target_pid = body.get("target_pid")
-    rank = int(body.get("rank") or 0)
-    if not target_pid or rank < 1 or rank > 10:
-        raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_body",
-                                         "message": "target_pid and rank 1..10 required"})
+    target_pid = _target_pid(body)
+    rank = _int_field(body, "rank", 1, 10, required=True)
+    await _outranks(state, room_id, principal, target_pid, affiliation_power_level("member", rank))
 
     existing = await state.participants.get_deputy(room_id, rank)
     if existing and existing.pid != target_pid:
@@ -162,10 +228,6 @@ async def assign_deputy(room_id: str, body: dict[str, Any], request: Request,
                                          "message": f"rank {rank} already held by {existing.pid}"})
 
     # Remove any prior rank held by target, then set affiliation=member with new rank.
-    p = await state.participants.get(room_id, target_pid)
-    if p is None:
-        raise HTTPException(404, detail={"code": "org.agentstorming.err.unknown_participant",
-                                         "message": "participant not found"})
     await state.participants.set_affiliation(room_id, target_pid, "member", rank)
 
     await state.sys_publish_event(
@@ -222,9 +284,9 @@ async def extend_grant(room_id: str, grant_id: str, body: dict[str, Any], reques
     except ValueError:
         raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_grant"})
 
-    ttl_seconds = int(body.get("ttl_seconds") or 0)
+    ttl_seconds = _int_field(body, "ttl_seconds", 1, MAX_DURATION_SECONDS, required=False)
     room = await state.rooms.get(room_id)
-    if ttl_seconds <= 0:
+    if ttl_seconds is None:
         ttl_seconds = room.config.go_speak_ttl_seconds
 
     ttl_expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
@@ -260,15 +322,29 @@ async def dynamic_invite(room_id: str, body: dict[str, Any], request: Request,
     state = request.app.state
     principal = await state.auth.require_moderator(room_id, authorization)
     await state.rate_limiter.check(principal.pid, "dynamic_invite")
+    # Participant invites only. Owner invites come from room creation and the
+    # owner's signed routes, and this one used to accept kind "owner", so a
+    # moderator could mint themselves a second, room-owner identity that
+    # outlived the owner vacating their seat and could reclaim it. A moderator
+    # invite is no use here either: the seat is held by the caller.
     kind = body.get("kind", "participant")
-    if kind not in ("participant", "moderator", "owner"):
-        raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_kind"})
-    ttl_seconds = int(body.get("ttl_seconds") or state.settings.invite_ttl_seconds_default)
+    if kind != "participant":
+        raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_kind",
+                                         "message": "a moderator may mint participant invites only"})
+    ttl_raw = body.get("ttl_seconds")
+    if ttl_raw is None:
+        ttl_seconds = state.settings.invite_ttl_seconds_default
+    elif isinstance(ttl_raw, int) and not isinstance(ttl_raw, bool) and 1 <= ttl_raw <= MAX_INVITE_TTL_SECONDS:
+        ttl_seconds = ttl_raw
+    else:
+        raise HTTPException(400, detail={"code": "org.agentstorming.err.bad_value", "field": "ttl_seconds"})
+    reason = body.get("reason")
+    if reason is not None and (not is_db_text(reason) or len(reason) > _MAX_REASON_LENGTH):
+        raise _bad_body(f"reason must be text of at most {_MAX_REASON_LENGTH} characters")
     expires = datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)
     _, token = await state.invites.create(room_id, kind, expires)
 
-    base_url = public_base_url(request)
-    link = f"{base_url}/r/{room_id}/join?t={token}"
+    link = invite_link(public_base_url(request), room_id, token)
 
     await state.sys_publish_event(
         room_id,
@@ -277,7 +353,7 @@ async def dynamic_invite(room_id: str, body: dict[str, Any], request: Request,
             "kind": kind,
             "by_pid": principal.pid,
             "expires_at": expires.isoformat(),
-            "reason": body.get("reason"),
+            "reason": reason,
         },
     )
     return {

@@ -128,7 +128,10 @@ class SSEWorker:
                         try:
                             raw = json.loads(sse_event.data)
                         except Exception:
-                            log.warning("bad SSE data: %r", sse_event.data[:100])
+                            # Metadata only: the data is room traffic, and a
+                            # slice of a message is still the message.
+                            log.warning("SSE event id=%s type=%s: %d characters, not JSON",
+                                        sse_event.id, sse_event.event, len(sse_event.data))
                             continue
                         if (
                             self._client.config.verify_signatures

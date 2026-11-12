@@ -49,14 +49,19 @@ The sections below were extended / refined during Stage 12. Where they contradic
 Every minted invite carries BOTH a token and a link:
 
 ```
-https://<server>/r/{room_id}/join?t={token}
+https://<server>/#/r/{room_id}/join?t={token}
 ```
 
-The SPA router recognises this shape. CLIs and SDKs accept either form.
+The token MUST be in the URL fragment. Browsers never send a fragment, so the
+token reaches no server log; the earlier query form,
+`https://<server>/r/{room_id}/join?t={token}`, wrote a live invite into every
+CDN, WAF and load-balancer access log whenever a link was opened or merely
+previewed. The SPA accepts both forms, so links already shared keep working.
 
 ### Moderator-seat lifecycle
 
 - **Fail-if-occupied**: `POST /v1/rooms/{id}/claim` with a moderator invite fails with HTTP 409 `org.agentstorming.err.moderator_seat_occupied` when an `original-moderator` already sits the seat. There is **no auto-demotion**.
+- **A claim never recovers an existing seat.** A claim carries an invite and a public key but no proof that the caller holds the private key, so a claim naming a key that already has a row in the room MUST be refused with HTTP 409 `org.agentstorming.err.already_joined` and MUST NOT consume the invite or issue tokens. Issuing them would hand that seat's session to anyone holding an invite and the seat's public key, which `participant_joined` broadcasts; for the moderator's key that is the moderator's authority. The refusal MUST hold for concurrent claims naming one key: whether the key is seated is decided by the insert, not by an earlier read. A participant whose tokens have lapsed rejoins with a new keypair.
 - **Owner vacates**: `DELETE /v1/owner/rooms/{id}/moderator` (signed) clears the seat; the previous moderator becomes `member`. A pending moderator invite can then be redeemed.
 - **Owner reclaims / promotes permanent**: `POST /v1/rooms/{id}/moderation/reclaim` (owner or original-moderator token) seizes the seat. `POST /v1/owner/rooms/{id}/moderator` (signed) makes a specific participant the permanent `original-moderator` (§7.5.6 `make_moderator_permanent`).
 
@@ -64,13 +69,22 @@ The SPA router recognises this shape. CLIs and SDKs accept either form.
 
 - Server maintains an `owner_keys` table; first boot seeds from `AGENTSTORMING_OWNER_PUBKEY`.
 - `GET /v1/owner/nonce` issues one-shot 60s nonces.
-- All mutating owner endpoints accept a canonical signed body `{…, nonce, ts, pubkey, sig}` where ts is within ±5 minutes of server time.
+- **Every owner endpoint MUST require an owner signature, reads and the nonce endpoint included.** That covers `GET /v1/owner/rooms`, `GET /v1/owner/rooms/{id}` and `GET /v1/owner/keys`, which list private rooms, room configuration and owner keys. Implementations SHOULD enforce this once for the whole owner surface rather than per endpoint (ADR-011).
+- `GET /v1/owner/nonce` cannot carry the nonce it issues, so it is signed over `{ts, op}` alone and carries `X-AgentStorming-Owner-Ts`, `X-AgentStorming-Owner-Pubkey` and `X-AgentStorming-Owner-Sig`. The server MUST NOT issue a nonce to an unsigned caller, and SHOULD rate-limit issuance per verified owner key rather than per client address, so that no other caller can spend the owner's allowance. A replay of this request within the `ts` window yields only another nonce, which is useless without the private key.
+- The signed payload is the request's fields plus `op`, the method and API path being called, for example `"GET /v1/owner/rooms"` or `"POST /v1/owner/rooms/demo/terminate"`, followed by `?query` when a query string is present. The path in `op` is the percent-decoded path with `%` written as `%25` and then `?` as `%3F`, so that the first `?` in `op` always begins the query: a room id `a?b` (requested as `/v1/owner/rooms/a%3Fb`) signs `"GET /v1/owner/rooms/a%3Fb"`, which no request for room `a` can match. The query string is used exactly as received. The client signs `op` and does not send it; the server MUST rebuild `op` from the request it received, so a signature verifies only on the endpoint it was made for. A body that does carry an `op` field MUST match, or the server refuses it with `org.agentstorming.err.op_mismatch`.
+- A request with a JSON body (`POST`, `PATCH`, `DELETE`) carries the signature in the body: `{…, nonce, ts, pubkey, sig}`, signed over the body minus `pubkey` and `sig`, plus `op`. A `GET` has no body and carries the same four values in the `X-AgentStorming-Owner-Nonce`, `X-AgentStorming-Owner-Ts`, `X-AgentStorming-Owner-Pubkey` and `X-AgentStorming-Owner-Sig` headers, signed over `{nonce, ts, op}`. An unsigned `GET` is refused with HTTP 401 `org.agentstorming.err.owner_auth_required`.
+- `ts` MUST be within ±5 minutes of server time and MUST carry a UTC offset (`Z` or `±hh:mm`); a timestamp without one is refused with `org.agentstorming.err.ts_invalid`. A body that has no JCS canonical form (NaN, Infinity, a number out of range, a lone surrogate) cannot have been signed and is refused with `org.agentstorming.err.bad_body`.
+- A signed request with a body MUST be `application/json` (or `application/*+json`); any other media type is refused with HTTP 415 (§8.2) before the nonce is checked, so it keeps its nonce. Every signed body MUST be refused (HTTP 422) if it carries a field the endpoint does not define: the signature covers the raw body, and a signed field that is silently dropped (a `ttl` typed for `ttl_seconds`) makes the server answer 200 for a request it did not honour.
+- The server MUST accept each signed nonce request once, judged by the key and the signed bytes rather than by the `sig` string. Ed25519 is deterministic, so two nonce requests signed with the same `ts` are the same bytes: a client that requests nonces concurrently MUST give each a distinct `ts` (the SDKs bump a timestamp that would repeat or fall up to a second behind the last one they signed, and otherwise follow the clock, so a clock stepped back does not leave them outside the window). The `sig` string does not count: a lenient base64 decoder reads `sig + "=="`, or `sig` with characters from outside the alphabet inside it, as the same signature, and each such spelling must count as the same request. A nonce request carries no nonce, so a captured one could otherwise be replayed for its whole `ts` window, each replay spending the owner's issuance allowance.
+- Nonces are scoped to the request type they were issued for. A nonce from the unauthenticated candidate route (`GET /v1/rooms/{id}/register/nonce`) MUST NOT be accepted by an owner route, and an owner nonce MUST NOT be accepted for credential collection.
+- The server checks, in order: `ts`, that the key is an active owner key, the signature, that the nonce is live, the per-key rate limit, and only then consumes the nonce. A replay of an already-used request is therefore refused before it is charged to the owner's limit. A request refused by any of those keeps its nonce. A request that passes them has spent it even if the endpoint then rejects the body (an unknown field, a mismatched `room_id`), so a corrected retry needs a fresh nonce.
+- **`PATCH /v1/owner/rooms/{id}`** sets `title`, `description` and any §5.2 field the owner may change: `visibility`, `mode`, `max_participants`, `deputies_enabled`, `raise_hand_required`, `go_speak_ttl_seconds`, `snapshot_interval_seconds`, `disconnect_grace_seconds`, `history_max_return`, `freeze_multiplier` and `attachments: {enabled, max_bytes}`, each at the top level of the body. A field the endpoint does not recognise MUST be refused (HTTP 422) rather than ignored, so a request never answers 200 for a change it did not make. A change of `mode` emits a server-signed `org.agentstorming.mode_promoted` with `promoted_by: "room-owner"`, demotions to `planning` included, so a broker learns of it at once rather than at the next snapshot.
 - **`POST /v1/owner/keys`** (signed by an existing owner key) adds a new owner pubkey; supports laptop-swap key rotation.
 - **`POST /v1/owner/keys/revoke`** revokes, refusing to delete the last remaining active key.
 
 ### Public registration + interview (§8.3–§8.4)
 
-- **`POST /v1/rooms/{id}/register`** — visibility=public only; candidates declare their `pubkey`, `runs_as`, and optional `declared` context. Server admits them with affiliation `pending-interview` and emits `registration_request` targeted at the moderator.
+- **`POST /v1/rooms/{id}/register`** — visibility=public only; a private room MUST be answered exactly as a nonexistent one (HTTP 404 `org.agentstorming.err.room_unknown`), so the route cannot be used to learn which private room names exist; candidates declare their `pubkey`, `runs_as`, and optional `declared` context. Server admits them with affiliation `pending-interview` and emits `registration_request` targeted at the moderator.
 - Candidate↔moderator exchange `org.agentstorming.whisper` events scoped to their two pids — filtered out of every other member's stream.
 - **`POST /v1/rooms/{id}/moderation/registrations/{iid}/accept|reject`** — moderator decision. Transitions affiliation to `member` or `ejected`; emits `registration_accepted`/`registration_rejected` to the whole room.
 - **`POST /v1/rooms/{id}/moderation/registration-door/close|open`** — moderator can close registration for a duration (max 30 days).
@@ -96,7 +110,7 @@ The moderator MAY mute their own inbound whisper channel from a specific peer wi
 ### Speaking-turn extensions + dynamic invites
 
 - **`POST /v1/rooms/{id}/grants/{gid}/extend`** (§6.7.6) — moderator issues a fresh grant for the same hand+pid; previous grant moves to EXPIRED. Broadcast `speaking_extension_granted`.
-- **`POST /v1/rooms/{id}/moderation/dynamic-invite`** (§8.2) — moderator mints an invite as an in-room action; broadcast `invite_minted`.
+- **`POST /v1/rooms/{id}/moderation/dynamic-invite`** (§8.2) — moderator mints a **participant** invite as an in-room action; broadcast `invite_minted`. The server MUST refuse any other `kind` (`400 bad_kind`): owner invites come only from room creation and the owner's signed routes, and a moderator able to mint one could give themselves a room-owner identity that outlives the owner vacating their seat.
 
 ### Time-range paginated history (§14)
 
@@ -616,7 +630,7 @@ The protocol is **HTTP + JSON + long-polling**:
 - All request and response bodies MUST be UTF-8-encoded JSON unless otherwise specified.
 - Event delivery MUST use HTTP long-polling on the `/sync` endpoint (see §10).
 - Mutations (posting messages, raising hands, moderation actions) MUST use plain HTTP requests with idempotency keys.
-- Attachments MUST be uploaded and retrieved over HTTP using presigned URLs or direct multipart uploads (see §15).
+- Attachments MUST be uploaded over HTTP as multipart uploads and retrieved through the authenticated download route, which MAY redirect to a short-lived presigned URL (see §15).
 
 This protocol deliberately does NOT use:
 
@@ -1322,7 +1336,7 @@ Body: {
 }
 ```
 
-`hand_id: null` is permitted; the moderator MAY grant a turn to a participant who has not raised a hand. The server:
+`hand_id: null` is permitted; the moderator MAY grant a turn to a participant who has not raised a hand. `target_pid` MUST name a participant of the room (HTTP 404 `org.agentstorming.err.unknown_participant` otherwise), `hand_id` MUST be a UUID when present, and `ttl_seconds`, when present, MUST be a JSON integer from 1 to 31_536_000. A malformed value is refused with HTTP 400 `org.agentstorming.err.bad_body`. The server:
 
 - Rejects if a different participant already has an active grant, with `org.agentstorming.err.grant_conflict`.
 - Otherwise creates an active grant with a unique `grant_id`, stores `(target_pid, hand_id, ttl_expires_at)`, and emits `go_speak_granted` on the room's channel.
@@ -1375,6 +1389,8 @@ The moderator sees this as a derived event and MAY grant a new grant with fresh 
 
 ## 12. Moderation: Mute, Eject, Pen, Freeze, Deputies
 
+Mute, eject, pen and deputy assignment each name a `target_pid` that MUST hold a seat in the room (HTTP 404 `org.agentstorming.err.unknown_participant` otherwise). Their numeric fields MUST be JSON integers in range; a string, a fraction, a boolean or an out-of-range value is refused with HTTP 400 `org.agentstorming.err.bad_body`.
+
 ### 12.1 Mute
 
 ```
@@ -1384,7 +1400,8 @@ Body: { target_pid: "...", duration_seconds: <int, required> }
 
 Mute:
 
-- MUST have a positive finite duration. Indefinite mutes are NOT PERMITTED.
+- MUST have a positive finite duration, a JSON integer of at most 31_536_000 seconds. Indefinite mutes are NOT PERMITTED.
+- MUST be refused (HTTP 403 `org.agentstorming.err.outranked`) unless the caller's power level is strictly above the target's (§6.3), so the moderator cannot mute the room owner.
 - Marks the target with role `muted`.
 - Emits `org.agentstorming.mute`.
 - While muted, the participant continues to receive events but cannot post any event type except `org.agentstorming.whisper` to the moderator.
@@ -1422,6 +1439,7 @@ Body: { target_pid: "..." }
 
 Eject:
 
+- MUST be refused (HTTP 403 `org.agentstorming.err.outranked`) unless the caller's power level is strictly above the target's (§6.3). The moderator cannot eject the room owner, nor itself.
 - Sets the target's affiliation to `ejected`.
 - Revokes all access/refresh tokens for the target.
 - Emits `participant_left` with `reason: "ejected"`.
@@ -1437,6 +1455,7 @@ Body: { target_pid: "...", duration_seconds: <int, required, max 31_536_000> }
 Pen:
 
 - MUST have a finite duration. Maximum duration is 1 year (31_536_000 seconds). The server MUST reject requests exceeding this.
+- MUST be refused (HTTP 403 `org.agentstorming.err.outranked`) unless the caller's power level is strictly above the target's (§6.3).
 - Sets the target's affiliation to `penned`.
 - Revokes access/refresh tokens.
 - Rejects future invite redemptions and registrations from the same pubkey until the duration elapses.
@@ -1452,6 +1471,7 @@ Body: { target_pid: "...", rank: <int 1..10> }
 ```
 
 - Only the current moderator MAY assign deputies.
+- The caller's power level MUST be strictly above both the target's and the rank's (`80 - rank`), per §6.3; otherwise the server answers HTTP 403 `org.agentstorming.err.outranked`. Without this the moderator could demote the room owner by naming it a deputy.
 - The assignment fails with `org.agentstorming.err.rank_taken` if another participant already holds that rank.
 - A participant MUST NOT hold two ranks simultaneously; the server moves the target off any prior rank.
 
@@ -1595,7 +1615,7 @@ Response:
 ```json
 {
   "id": "<uuid>",
-  "url": "<presigned GET URL, 7-day TTL>",
+  "url": "<the download route: {base}/v1/attachments/{id}>",
   "s3_key": "<opaque key>",
   "content_type": "...",
   "size_bytes": <int>,
@@ -1620,14 +1640,28 @@ An `org.agentstorming.attachment` event carries attachment descriptors in its pa
 }
 ```
 
-### 15.3 URL refresh
+### 15.3 Download
 
-Presigned URLs expire. Clients refresh via:
+```
+GET /v1/attachments/{id}
+Authorization: Bearer <access_token>
+```
+
+The server MUST require a bearer token belonging to a current member of the room that owns the attachment, the same rule as §15.4. An attachment ID is not a credential: it travels in event payloads, so an ID alone MUST NOT download the file, and a member who has been ejected MUST lose access. The local storage backend returns the file; the S3 backend answers 307 with a freshly presigned URL. A client MUST NOT send its bearer token to that URL, which carries its own credential.
+
+A presigned URL keeps working until it expires, whoever holds it, so the URL a server hands out in an upload response or for an attachment event MUST be this download route, never a presigned URL. Presigned URLs are issued only after the membership check, by the redirect here and by §15.4, and SHOULD expire within minutes (the reference server defaults to 300 seconds, `AGENTSTORMING_ATTACHMENTS_PRESIGN_TTL_SECONDS`). An ejected member therefore loses access at once on the download route, and to any presigned URL they already hold once it expires. Responses carry `Cache-Control: private, no-store`.
+
+### 15.4 URL refresh
+
+A client that wants a direct URL, for example to hand to a downloader that cannot send the bearer, asks for one:
 
 ```
 POST /v1/attachments/refresh
-Body: { s3_key: "..." }
+Authorization: Bearer <access_token>
+Body: { att_id: "..." }        (or { s3_key: "..." })
 ```
+
+The response carries `url` and `expires_in_seconds`. On the S3 backend `url` is a presigned URL that expires after `expires_in_seconds`; on the local backend it is the download route of §15.3 and `expires_in_seconds` is `null`.
 
 ---
 
@@ -1746,6 +1780,15 @@ Defined codes (not exhaustive):
 | `org.agentstorming.err.nonce_invalid` | Signed-request nonce unknown, expired, or already consumed. |
 | `org.agentstorming.err.sig_invalid` | Signature over a signed request body failed to verify. |
 | `org.agentstorming.err.ts_skew` | Signed request timestamp outside the ±5 minute window. |
+| `org.agentstorming.err.owner_auth_required` | An owner `GET` arrived without the `X-AgentStorming-Owner-*` signature headers. |
+| `org.agentstorming.err.op_mismatch` | A signed owner body names a different `op` from the request it arrived on. |
+| `org.agentstorming.err.ts_invalid` | Signed request timestamp is not ISO-8601 with a UTC offset. |
+| `org.agentstorming.err.attachments_disabled` | The room's `attachments.enabled` is false, so uploads are refused. |
+| `org.agentstorming.err.unsupported_media_type` | A signed owner request with a body was not `application/json` (HTTP 415). |
+| `org.agentstorming.err.already_joined` | The claiming key already holds a seat in the room; the invite is not consumed. |
+| `org.agentstorming.err.bad_path` | The request path contains a NUL, which no room or resource id can hold. |
+| `org.agentstorming.err.outranked` | A moderation call targets a participant whose power level is not below the caller's (§6.3). |
+| `org.agentstorming.err.unknown_participant` | A moderation call names a `target_pid` with no seat in the room. |
 
 ---
 

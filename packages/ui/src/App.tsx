@@ -247,7 +247,9 @@ export function App() {
   async function doSend() {
     if (!session || !composer.trim()) return;
     try {
-      await postMessage(session, composer);
+      // Without the grant, a raise-hand-required room answered 409 no_grant
+      // even while the UI showed this participant holding the floor.
+      await postMessage(session, composer, [], myActiveGrant?.grant_id);
       setComposer("");
     } catch (e: any) {
       pushError(`Send failed: ${String(e)}`);
@@ -347,7 +349,7 @@ export function App() {
               <label>
                 <span className="label">Invite token</span>
                 <input
-                  placeholder="paste token (or use a /r/<room>/join?t=… link)"
+                  placeholder="paste token (or open a /#/r/<room>/join?t=… link)"
                   value={inviteToken}
                   onChange={(e) => setInviteToken(e.target.value)}
                 />

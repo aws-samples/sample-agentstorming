@@ -5,10 +5,22 @@
 
 from __future__ import annotations
 
+import hashlib
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 import asyncpg
+
+
+def hash_secret(token: str) -> bytes:
+    """SHA-256 of a caller-supplied token, as stored in place of the token.
+
+    UTF-8 with surrogatepass, never ASCII: the server mints ASCII tokens, but a
+    caller can send anything, and encode("ascii") made each such token a 500.
+    The mapping is one-to-one, so a non-ASCII input cannot collide with the
+    hash of a real token.
+    """
+    return hashlib.sha256(token.encode("utf-8", "surrogatepass")).digest()
 
 
 class Database:
@@ -49,3 +61,16 @@ class Database:
         async with self.pool.acquire() as conn:
             async with conn.transaction():
                 yield conn
+
+    @asynccontextmanager
+    async def use(self, conn: asyncpg.Connection | None) -> AsyncIterator[asyncpg.Connection]:
+        """The caller's connection when it passes one, else one from the pool.
+
+        Lets a repository method join a transaction the caller already holds,
+        so work done under a lock needs no second connection.
+        """
+        if conn is not None:
+            yield conn
+            return
+        async with self.pool.acquire() as pooled:
+            yield pooled

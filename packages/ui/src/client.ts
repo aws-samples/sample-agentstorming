@@ -19,17 +19,22 @@ function b64urlDecode(s: string): Uint8Array {
   return Uint8Array.from(binary, (c) => c.charCodeAt(0));
 }
 
+// Same rules as packages/client-ts/src/signing.ts; keep the two identical.
 function canonicalise(v: any): string {
   if (v === null || v === undefined) return "null";
   if (typeof v === "boolean") return v ? "true" : "false";
   if (typeof v === "number") {
+    // JSON has no NaN or Infinity; JSON.stringify would send them as null.
+    if (!Number.isFinite(v)) throw new Error("cannot canonicalise a non-finite number");
     if (Number.isInteger(v)) return String(v);
     return JSON.stringify(v);
   }
   if (typeof v === "string") return JSON.stringify(v);
   if (Array.isArray(v)) return "[" + v.map(canonicalise).join(",") + "]";
   if (typeof v === "object") {
-    const keys = Object.keys(v).sort();
+    // Undefined members are left out, as JSON.stringify leaves them out of
+    // the body that is sent; signing them as null broke the signature.
+    const keys = Object.keys(v).filter((k) => v[k] !== undefined).sort();
     return "{" + keys.map((k) => JSON.stringify(k) + ":" + canonicalise(v[k])).join(",") + "}";
   }
   throw new Error("unsupported type: " + typeof v);
@@ -188,8 +193,16 @@ export async function raiseHand(s: Session, hint = ""): Promise<any> {
   return postEvent(s, "org.agentstorming.hand_raised", { hint });
 }
 
-export async function postMessage(s: Session, text: string, mentions: string[] = []): Promise<any> {
-  return postEvent(s, "org.agentstorming.message", { text }, { mentions });
+/**
+ * Post a message. In a raise-hand-required room the server refuses a message
+ * without the grant_id of the poster's active grant (409 no_grant), so pass it
+ * whenever the participant holds the floor.
+ */
+export async function postMessage(
+  s: Session, text: string, mentions: string[] = [], grantId?: string,
+): Promise<any> {
+  const payload = grantId ? { text, grant_id: grantId } : { text };
+  return postEvent(s, "org.agentstorming.message", payload, { mentions });
 }
 
 /**

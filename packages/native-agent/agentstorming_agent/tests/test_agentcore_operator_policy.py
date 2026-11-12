@@ -172,3 +172,40 @@ def test_config_rejects_values_that_would_make_the_policy_unsatisfiable(bad) -> 
     error rather than here with a readable message."""
     with pytest.raises(SystemExit):
         _cfg(**bad)
+
+
+@pytest.mark.parametrize("uri", [
+    "111122223333.dkr.ecr.us-east-1.amazonaws.com/agentstorming:latest",
+    "111122223333.dkr.ecr.us-east-1.amazonaws.com/agentstorming",
+    "localhost:5000/agentstorming",
+    "localhost:5000/agentstorming:latest",
+])
+def test_an_unpinned_image_is_refused(uri) -> None:
+    """The next push to a mutable tag would change what every new session runs."""
+    with pytest.raises(SystemExit, match="not pinned"):
+        _cfg(container_uri=uri)
+
+
+@pytest.mark.parametrize("uri", [
+    "111122223333.dkr.ecr.us-east-1.amazonaws.com/agentstorming:release-2026-11-02",
+    "localhost:5000/agentstorming:1",
+    "111122223333.dkr.ecr.us-east-1.amazonaws.com/agentstorming@sha256:" + "a" * 64,
+])
+def test_a_pinned_image_is_accepted(uri) -> None:
+    assert _cfg(container_uri=uri).container_uri == uri
+
+
+def test_the_shipped_example_is_a_placeholder_not_latest() -> None:
+    import json
+    example = json.loads((DEPLOY_PY.parent / "panel.example.json").read_text())
+    assert not example["container_uri"].endswith(":latest")
+
+
+def test_an_old_unpinned_config_can_still_be_torn_down() -> None:
+    """Only commands that run an image enforce the pin; destroy and stop must
+    work for a panel deployed before the check existed."""
+    raw = {**RAW, "container_uri": "111122223333.dkr.ecr.us-east-1.amazonaws.com/agentstorming:latest"}
+    cfg = deploy.Config(raw, Path("panel.json"), require_pinned_image=False)
+    assert cfg.container_uri.endswith(":latest")
+    with pytest.raises(SystemExit, match="not pinned"):
+        deploy.Config(raw, Path("panel.json"))

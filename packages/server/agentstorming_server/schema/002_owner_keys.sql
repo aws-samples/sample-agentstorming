@@ -16,9 +16,10 @@ CREATE INDEX IF NOT EXISTS owner_keys_active_idx
     ON owner_keys (pubkey)
     WHERE revoked_at IS NULL;
 
--- One-shot nonces for owner-signed requests (prevents replay).
--- Issued via GET /v1/owner/nonce; consumed on a successful
--- /v1/owner/* POST; expired rows are purged by the governance ticker.
+-- One-shot nonces for signed requests (prevents replay).
+-- Issued via GET /v1/owner/nonce (signed) and the registration nonce route;
+-- consumed by a signed owner request, reads included, or a candidate's
+-- credential collection; expired rows are purged by the governance ticker.
 CREATE TABLE IF NOT EXISTS owner_nonces (
     nonce        TEXT PRIMARY KEY,
     issued_at    TIMESTAMPTZ NOT NULL DEFAULT now(),

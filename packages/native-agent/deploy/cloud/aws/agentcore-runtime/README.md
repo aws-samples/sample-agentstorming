@@ -64,16 +64,23 @@ deliberation never blocks a health check.
 - A reachable storm server. The Instances compute type is **VPC-only**, so
   the subnets you give the capacity provider need a route to it — a NAT
   gateway for a public server, or same-VPC placement.
-- An ECR image built for the capacity provider's architecture:
+- An ECR image built for the capacity provider's architecture, tagged with
+  something that never moves. Create the repository with immutable tags
+  (`aws ecr create-repository --image-tag-mutability IMMUTABLE ...`) and tag
+  each build with its commit; `deploy.py` refuses `:latest` or an untagged
+  `container_uri`, because the next push would change what every new session
+  runs without any change to the config:
 
   ```bash
   # from the repository root; --platform MUST match operatingSystem
+  TAG=$(git rev-parse --short=12 HEAD)
+  IMAGE="$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/agentstorming/agent-agentcore:$TAG"
   docker build -f packages/native-agent/Dockerfile.agentcore \
-    --platform linux/arm64 \
-    -t "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/agentstorming/agent-agentcore:latest" .
+    --platform linux/arm64 -t "$IMAGE" .
   aws ecr get-login-password --region "$REGION" \
     | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com"
-  docker push "$ACCOUNT.dkr.ecr.$REGION.amazonaws.com/agentstorming/agent-agentcore:latest"
+  docker push "$IMAGE"
+  echo "$IMAGE"    # put this in panel.json as container_uri
   ```
 - The persona directory baked into the image or mounted at
   `AGENTSTORMING_PERSONA_DIR` (default `/persona`).

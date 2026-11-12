@@ -1,6 +1,6 @@
 # ADR-004: Owner-key bootstrap for room + server administration
 
-- Status: **Accepted**
+- Status: **Accepted**, amended by [ADR-011](./ADR-011-owner-signatures-cover-reads-and-bind-the-endpoint.md): reads are signed too, and every signature binds the method and path
 - Date: 2026-03-02
 - Deciders: Yudho Diponegoro
 

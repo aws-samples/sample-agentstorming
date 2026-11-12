@@ -223,3 +223,60 @@ def test_atlassian_oauth2_defaults():
     expected_endpoint = "https://auth.atlassian.com/oauth/token"
     assert p.token_endpoint == expected_endpoint
     assert p.host_allowlist == {"api.atlassian.com"}
+
+
+class _EchoingTokenEndpoint:
+    """A token endpoint that fails and echoes the request back, as some do."""
+
+    def __init__(self, status: int, body: str, json_body=None):
+        self.status, self.body, self.json_body = status, body, json_body
+
+    def __call__(self, *args, **kwargs):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def post(self, url, data=None):
+        endpoint = self
+
+        class _Response:
+            status_code = endpoint.status
+            text = endpoint.body.format(**(data or {}))
+
+            def json(self):
+                if endpoint.json_body is None:
+                    raise ValueError("not JSON")
+                if endpoint.json_body == "too deep":
+                    raise RecursionError("maximum recursion depth exceeded")
+                return {k: v.format(**(data or {})) if isinstance(v, str) else v
+                        for k, v in endpoint.json_body.items()}
+
+        return _Response()
+
+
+@pytest.mark.parametrize("status,body,json_body,expected", [
+    (400, '{{"error":"invalid_grant","error_description":"bad token {refresh_token}"}}',
+     {"error": "invalid_grant", "error_description": "bad token {refresh_token}"},
+     "refresh failed: HTTP 400 (invalid_grant)"),
+    (502, "<html>upstream sent {refresh_token} / {client_secret}</html>", None,
+     "refresh failed: HTTP 502"),
+    (400, "{{}}", {"error": "{client_secret}"}, "refresh failed: HTTP 400"),
+    (400, "{{}}", {"error": {"message": "expired", "code": 190}}, "refresh failed: HTTP 400"),
+    (400, "[[[[", "too deep", "refresh failed: HTTP 400"),
+], ids=["oauth-error", "html", "non-standard-code", "object-error", "nested-too-deep"])
+def test_a_failed_refresh_never_quotes_the_token_endpoint(monkeypatch, status, body, json_body, expected):
+    """The error goes back to the agent. It used to carry 200 characters of the
+    response body, which an echoing endpoint fills with the refresh token."""
+    import httpx
+    from storm_broker.providers import SalesforceProvider
+
+    p = SalesforceProvider(oauth_config(instance_host="acme.my.salesforce.com"))
+    monkeypatch.setattr(httpx, "Client", _EchoingTokenEndpoint(status, body, json_body))
+    with pytest.raises(ProviderError) as e:
+        p.prepare_headers("salesforce", "GET", "https://acme.my.salesforce.com/services/data/v60.0/")
+    assert str(e.value) == expected
+    assert p._refresh_token not in str(e.value) and p._client_secret not in str(e.value)

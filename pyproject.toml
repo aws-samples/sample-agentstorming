@@ -10,6 +10,15 @@ license = "MIT-0"
 
 [tool.uv]
 package = false
+# Dependency cooldown: never resolve a release younger than seven days. Most
+# malicious uploads are found and pulled within that window. It applies when the
+# lock is (re)resolved; `uv sync --frozen` installs uv.lock as is regardless.
+# A relative span needs uv 0.9.17 or later. Older uv cannot parse it: it warns
+# "Failed to parse pyproject.toml during settings discovery" and ignores this
+# whole table, required-version included, so the cooldown is silently off.
+# Re-lock only with uv >= 0.9.17 (CI pins 0.13.5).
+exclude-newer = "7 days"
+required-version = ">=0.9.17"
 
 [tool.uv.workspace]
 # storm-broker and storm-broker-shim were installed by scripts/build-python.sh

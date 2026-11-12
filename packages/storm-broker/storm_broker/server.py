@@ -364,9 +364,23 @@ class BrokerServer:
         if not decision.allow:
             self._record(peer, params, "deny", decision.reason)
             raise PolicyDenied(decision.reason, {})
-        session_vars = params.get("session_vars", {}) or {}
-        result = provider.prepare_credentials(target, **session_vars) if session_vars \
-                 else provider.prepare_credentials(target)
+        # The agent's values are labels it chose. The shim sends persona_pid,
+        # room_id and task_id as top-level params, not in session_vars, and
+        # reading only session_vars rendered every label "unset" in the STS
+        # session name. Only uid is the broker's own observation (SO_PEERCRED),
+        # so it is set last and cannot be overridden.
+        raw_vars = params.get("session_vars") or {}
+        session_vars = {
+            str(k): str(v) for k, v in raw_vars.items() if isinstance(v, (str, int))
+        } if isinstance(raw_vars, dict) else {}
+        for label in ("persona_pid", "room_id", "task_id"):
+            value = params.get(label)
+            if isinstance(value, str) and value:
+                session_vars.setdefault(label, value)
+        session_vars["uid"] = str(peer.uid)
+        # AssumeRole is a blocking network call; on the event loop it stalled
+        # every other client of the broker for its duration.
+        result = await asyncio.to_thread(provider.prepare_credentials, target, **session_vars)
         self._record(peer, params, "allow", "ok")
         return {"credentials": result.credentials_json}
 

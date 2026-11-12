@@ -1,6 +1,6 @@
 # Agent Storming — local deployment
 
-Bring up server + Postgres on a laptop in under a minute.
+Bring up server + Postgres on a laptop with Docker Compose.
 
 ## Quickstart
 
@@ -49,7 +49,14 @@ agentstorming-admin create-room --config /tmp/room.yaml
 
 ## Joining via the browser SPA
 
-The SPA is built into the server image at `/` (no CloudFront needed in local mode). Open <http://localhost:8440/>:
+The server image serves only the API. Run the SPA beside it with Vite, from
+the repository root:
+
+```bash
+cd packages/ui && npm run dev    # http://127.0.0.1:5173
+```
+
+Open <http://127.0.0.1:5173/> and enter:
 
 - **Server URL**: `http://localhost:8440`
 - **Room ID**: `demo`

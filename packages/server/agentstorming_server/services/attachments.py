@@ -24,12 +24,21 @@ class AttachmentInfo:
     sha256_hex: str
 
 
+#: Default lifetime of a presigned GET, and the ceiling S3 itself imposes.
+#: Short on purpose: the server checks membership when it presigns, and a
+#: presigned URL keeps working for its whole lifetime whatever happens to the
+#: member who holds it. It used to be seven days and was copied into every
+#: attachment event, so an ejected member kept downloading for a week.
+DEFAULT_PRESIGN_TTL_SECONDS = 300
+MAX_PRESIGN_TTL_SECONDS = 604_800
+
+
 class AttachmentStorage:
     async def put(self, *, room_id: str, sender_pid: str, filename: str, data: bytes,
                   content_type: str) -> AttachmentInfo:
         raise NotImplementedError
 
-    def presign_get(self, info: AttachmentInfo, *, expires_in_seconds: int = 604800) -> str:
+    def presign_get(self, info: AttachmentInfo) -> str:
         raise NotImplementedError
 
 
@@ -59,17 +68,23 @@ class LocalAttachmentStorage(AttachmentStorage):
             sha256_hex=sha,
         )
 
-    def presign_get(self, info: AttachmentInfo, *, expires_in_seconds: int = 604800) -> str:
+    def presign_get(self, info: AttachmentInfo) -> str:
         # Local mode: simply serve by path via the /v1/attachments/{id} GET endpoint.
         return f"{self.public_url_base}/v1/attachments/{info.att_id}"
 
 
 class S3AttachmentStorage(AttachmentStorage):
-    def __init__(self, bucket: str, region: str) -> None:
+    def __init__(self, bucket: str, region: str, *,
+                 presign_ttl_seconds: int = DEFAULT_PRESIGN_TTL_SECONDS) -> None:
         import boto3
         from botocore.client import Config as BotoConfig
+        if not 1 <= presign_ttl_seconds <= MAX_PRESIGN_TTL_SECONDS:
+            raise ValueError(
+                f"presign_ttl_seconds must be 1 to {MAX_PRESIGN_TTL_SECONDS}, got {presign_ttl_seconds}"
+            )
         self.bucket = bucket
         self.region = region
+        self.presign_ttl_seconds = presign_ttl_seconds
         self.s3 = boto3.client(
             "s3",
             region_name=region,
@@ -97,9 +112,9 @@ class S3AttachmentStorage(AttachmentStorage):
             sha256_hex=sha,
         )
 
-    def presign_get(self, info: AttachmentInfo, *, expires_in_seconds: int = 604800) -> str:
+    def presign_get(self, info: AttachmentInfo) -> str:
         return self.s3.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.bucket, "Key": info.s3_key},
-            ExpiresIn=expires_in_seconds,
+            ExpiresIn=self.presign_ttl_seconds,
         )

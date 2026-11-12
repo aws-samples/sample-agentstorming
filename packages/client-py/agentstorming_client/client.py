@@ -8,11 +8,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import mimetypes
 import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+from urllib.parse import quote
 
 from .buffer import BufferManager
 from .config import ClientConfig
@@ -400,12 +402,35 @@ class StormClient:
 
     async def upload_attachment(self, path: Path) -> dict[str, Any]:
         path = Path(path)
+        # Declare what the file is. Everything used to go up as
+        # application/octet-stream, so a reader could not tell notes from a
+        # binary and the MCP download tool never returned text.
+        ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         with path.open("rb") as f:
-            files = {"file": (path.name, f.read(), "application/octet-stream")}
+            files = {"file": (path.name, f.read(), ctype)}
         return await self.transport.post_multipart(
             f"/v1/rooms/{self.config.room_id}/attachments",
             files=files, token=self.vault.data.access_token,
         )
+
+    async def download_attachment(self, att_id: str) -> dict[str, Any]:
+        """Fetch an attachment's bytes as a current member of this room.
+
+        Returns ``{"id", "content_type", "size_bytes", "data"}`` with ``data``
+        as bytes. The download route needs this session's bearer token (§15.3);
+        on the S3 backend it redirects to a short-lived presigned URL, which is
+        fetched without the bearer.
+        """
+        r = await self.transport.get_bytes(
+            f"/v1/attachments/{quote(str(att_id), safe='')}",
+            token=self.vault.data.access_token,
+        )
+        return {
+            "id": str(att_id),
+            "content_type": r.headers.get("content-type"),
+            "size_bytes": len(r.content),
+            "data": r.content,
+        }
 
     async def post_attachment(self, path: Path, text: str = "") -> dict[str, Any]:
         info = await self.upload_attachment(path)

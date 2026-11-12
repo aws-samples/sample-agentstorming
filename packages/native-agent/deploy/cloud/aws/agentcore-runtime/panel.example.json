@@ -9,7 +9,8 @@
   "subnets": ["subnet-REPLACE-ME-a", "subnet-REPLACE-ME-b"],
   "security_groups": ["sg-REPLACE-ME"],
 
-  "container_uri": "123456789012.dkr.ecr.us-east-1.amazonaws.com/agentstorming/agent-agentcore:latest",
+  "_comment_image": "Pin the image: a commit-SHA tag in a repository with immutable tags, or a digest (@sha256:...). deploy.py refuses :latest or no tag.",
+  "container_uri": "123456789012.dkr.ecr.us-east-1.amazonaws.com/agentstorming/agent-agentcore:REPLACE-WITH-COMMIT-SHA",
 
   "_comment_compute_bounds": "max_volume_size_gb bounds the IAM grant for EBS volumes the operator role may create. It does not size anything; AgentCore takes the size from the AMI. Raise it if a persona needs a large working set.",
   "max_volume_size_gb": 200,

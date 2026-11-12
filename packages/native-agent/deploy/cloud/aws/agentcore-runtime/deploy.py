@@ -79,8 +79,27 @@ def log(msg: str) -> None:
 # config
 
 
+def _require_pinned_image(uri: str) -> None:
+    """Refuse an image reference that can change under a running deployment.
+
+    ``:latest`` or no tag at all means the next push silently changes what every
+    new session runs, without any change to this config. A digest
+    (``@sha256:...``) or a fixed tag, such as a commit SHA in a repository with
+    immutable tags, does not.
+    """
+    if "@sha256:" in uri:
+        return
+    last = uri.rsplit("/", 1)[-1]
+    tag = last.split(":", 1)[1] if ":" in last else ""
+    if not tag or tag == "latest":
+        raise SystemExit(
+            f"container_uri {uri!r} is not pinned: use a digest (@sha256:...) or a fixed "
+            "tag such as the commit SHA, in a repository with immutable tags"
+        )
+
+
 class Config:
-    def __init__(self, raw: dict[str, Any], path: Path) -> None:
+    def __init__(self, raw: dict[str, Any], path: Path, *, require_pinned_image: bool = True) -> None:
         self.path = path
         self.name: str = raw["name"]
         self.region: str = raw.get("region", "us-east-1")
@@ -116,11 +135,15 @@ class Config:
             raise SystemExit("instance_types must list at least one instance type")
         if self.max_volume_size_gb < 1:
             raise SystemExit("max_volume_size_gb must be at least 1")
+        # Only where an image is about to be run. Tearing down, stopping or
+        # inspecting a panel deployed before this check must still work.
+        if require_pinned_image:
+            _require_pinned_image(self.container_uri)
 
     @classmethod
-    def load(cls, path: str) -> "Config":
+    def load(cls, path: str, *, require_pinned_image: bool = True) -> "Config":
         p = Path(path)
-        return cls(json.loads(p.read_text()), p)
+        return cls(json.loads(p.read_text()), p, require_pinned_image=require_pinned_image)
 
     @property
     def capacity_provider_name(self) -> str:
@@ -838,7 +861,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--profile", default=None)
     args = p.parse_args(argv)
 
-    cfg = Config.load(args.config)
+    cfg = Config.load(args.config,
+                      require_pinned_image=args.command in ("plan", "apply", "start", "say"))
     session = boto3.Session(profile_name=args.profile) if args.profile \
         else boto3.Session()
 

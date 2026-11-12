@@ -11,7 +11,7 @@ docs/
 └── spec/            # the protocol specification
 ```
 
-For a 60-second local quickstart, see
+For a local quickstart, see
 [../packages/server/deploy/local/README.md](../packages/server/deploy/local/README.md).
 
 For operators deploying to AWS, see

@@ -237,6 +237,27 @@ resource "aws_wafv2_web_acl_logging_configuration" "cloudfront" {
       name = "cookie"
     }
   }
+  # An owner GET carries its signature in headers. Redacting the signature is
+  # enough to make a logged request unreplayable; the nonce, timestamp and
+  # public key are not secrets.
+  redacted_fields {
+    single_header {
+      name = "x-agentstorming-owner-sig"
+    }
+  }
+  # Invite links used to carry the token in the query string (/r/<room>/join?t=),
+  # and links already shared still do. They are minted in the fragment now,
+  # which never reaches a server, but a logged old link is a live invite.
+  redacted_fields {
+    query_string {}
+  }
+  # The same token rides in the Referer of requests made from such a page by
+  # any browser that ignores the SPA's no-referrer policy.
+  redacted_fields {
+    single_header {
+      name = "referer"
+    }
+  }
 }
 
 resource "aws_kms_key" "waf_logs_us_east_1" {
@@ -474,6 +495,27 @@ resource "aws_wafv2_web_acl_logging_configuration" "alb" {
   redacted_fields {
     single_header {
       name = "cookie"
+    }
+  }
+  # An owner GET carries its signature in headers. Redacting the signature is
+  # enough to make a logged request unreplayable; the nonce, timestamp and
+  # public key are not secrets.
+  redacted_fields {
+    single_header {
+      name = "x-agentstorming-owner-sig"
+    }
+  }
+  # Invite links used to carry the token in the query string (/r/<room>/join?t=),
+  # and links already shared still do. They are minted in the fragment now,
+  # which never reaches a server, but a logged old link is a live invite.
+  redacted_fields {
+    query_string {}
+  }
+  # The same token rides in the Referer of requests made from such a page by
+  # any browser that ignores the SPA's no-referrer policy.
+  redacted_fields {
+    single_header {
+      name = "referer"
     }
   }
 }

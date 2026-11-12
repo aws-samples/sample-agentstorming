@@ -79,22 +79,42 @@ async def stream(
                 "data": json.dumps(snap),
             }
 
-        # 2. Replay anything since the cursor.
-        last_seq = cursor
-        replay = await state.events.get_after(room_id, last_seq, limit)
-        for ev in replay:
-            seq = int(ev.get("seq", -1))
-            if seq <= last_seq:
-                continue
-            if not _event_visible_to(ev, principal.pid, ignore_map=ignore_map):
-                last_seq = seq
-                continue
-            yield {"id": str(seq), "event": "event", "data": json.dumps(ev)}
-            last_seq = seq
-
-        # 3. Subscribe and stream live events, with periodic keep-alive.
+        # 2. Subscribe first, then replay, so an event committed between the
+        #    replay query and the subscription still wakes the loop below.
+        #    Subscribing afterwards, as this used to, held such an event until
+        #    some later one arrived.
         q = state.pubsub.subscribe(room_id)
+        last_seq = cursor
+
+        async def catch_up():
+            """Every event after last_seq, page by page, not just one page.
+
+            One page left a client more than `limit` events behind with the
+            rest until something else woke the stream."""
+            nonlocal last_seq
+            while True:
+                page = await state.events.get_after(room_id, last_seq, limit)
+                out = []
+                for ev in page:
+                    seq = int(ev.get("seq", -1))
+                    if seq <= last_seq:
+                        continue
+                    # The replay and live paths share one ignore-map filter;
+                    # otherwise live whispers from a moderator-ignored
+                    # participant slip through until reconnect.
+                    if _event_visible_to(ev, principal.pid, ignore_map=ignore_map):
+                        out.append({"id": str(seq), "event": "event", "data": json.dumps(ev)})
+                    last_seq = seq
+                yield out
+                if len(page) < limit:
+                    return
+
         try:
+            async for batch in catch_up():
+                for item in batch:
+                    yield item
+
+            # 3. Stream live events, with periodic keep-alive.
             while True:
                 if await request.is_disconnected():
                     return
@@ -104,21 +124,11 @@ async def stream(
                         q.get_nowait()
                 except asyncio.TimeoutError:
                     yield {"comment": "keepalive"}
-                    continue
-
-                new_events = await state.events.get_after(room_id, last_seq, limit)
-                for ev in new_events:
-                    seq = int(ev.get("seq", -1))
-                    if seq <= last_seq:
-                        continue
-                    # Apply the same ignore-map the replay path uses;
-                    # otherwise live whispers from a moderator-ignored
-                    # participant slip through until reconnect.
-                    if not _event_visible_to(ev, principal.pid, ignore_map=ignore_map):
-                        last_seq = seq
-                        continue
-                    yield {"id": str(seq), "event": "event", "data": json.dumps(ev)}
-                    last_seq = seq
+                    # A quiet interval is also when a lost NOTIFY would go
+                    # unnoticed, so look for anything missed.
+                async for batch in catch_up():
+                    for item in batch:
+                        yield item
         finally:
             state.pubsub.unsubscribe(room_id, q)
 
@@ -157,6 +167,10 @@ async def sync_compat(
         ignore_map = await state.ignore_entries.fetch_map(room_id, principal.pid) or None
 
     events = await state.events.get_after(room_id, since, limit)
+    # The cursor advances over the page as read, not as shown: computed after
+    # the visibility filter, a page made only of other people's whispers left
+    # it where it was, and the client asked for the same page forever.
+    raw_last = max((e.get("seq") for e in events if isinstance(e.get("seq"), int)), default=since)
     if since < 0:
         snap = await state.snapshot.build_raw_dict(
             room_id,
@@ -168,11 +182,7 @@ async def sync_compat(
     # sender or the addressed target. Same filter as /stream.
     events = [e for e in events if _event_visible_to(e, principal.pid, ignore_map=ignore_map)]
 
-    next_since = since
-    for ev in events:
-        seq = ev.get("seq")
-        if isinstance(seq, int) and seq > next_since:
-            next_since = seq
+    next_since = max(since, raw_last)
 
     return {
         "events": events,

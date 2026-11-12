@@ -48,6 +48,25 @@ class AuthGate:
                 status_code=401,
                 detail={"code": "org.agentstorming.err.auth", "message": "invalid or expired access token"},
             )
+        return await self._admit(room_id, row)
+
+    async def principal_for_bearer(self, authorization: str | None) -> Principal:
+        """The bearer's principal in whichever room its token belongs to.
+
+        For routes whose URL names a resource rather than a room (an attachment
+        id): the credential is checked before the resource is looked up, so a
+        caller holding no valid token learns nothing about which ids exist.
+        """
+        token = await _require_bearer(authorization)
+        row = await self._tokens.lookup_access(token)
+        if not row:
+            raise HTTPException(
+                status_code=401,
+                detail={"code": "org.agentstorming.err.auth", "message": "invalid or expired access token"},
+            )
+        return await self._admit(row["room_id"], row)
+
+    async def _admit(self, room_id: str, row) -> Principal:
         p = await self._participants.get(room_id, row["pid"])
         if not p:
             raise HTTPException(
